@@ -45,7 +45,7 @@ def export():
     ensure_data_dirs();destination=DATA_ROOT/'diagnostics';destination.mkdir(exist_ok=True)
     stamp=datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     out=destination/('Proxima-diagnostics-'+stamp+'.zip')
-    metadata={'beta_version':'0.1.0','created_at':datetime.datetime.now().astimezone().isoformat(),'contents':'Recent miner logs and GPU setup only. No wallet files, recovery passwords or private keys are included.'}
+    metadata={'beta_version':'0.1.1','created_at':datetime.datetime.now().astimezone().isoformat(),'contents':'Recent miner logs and GPU setup only. No wallet files, recovery passwords or private keys are included.'}
     profile=DATA_ROOT/'device-profile.json'
     if profile.is_file():
         p=json.loads(profile.read_text(encoding='utf-8'))

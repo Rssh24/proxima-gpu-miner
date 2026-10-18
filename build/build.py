@@ -153,6 +153,30 @@ def copy_public_sources(source: Path, output: Path) -> dict[str, str]:
     return source_hashes
 
 
+def refresh_dependency_record(output: Path, source: Path, go: str,
+                              env: dict[str, str], lock: dict) -> None:
+    """Bind shipped license inventory to these exact rebuilt binaries."""
+    path = output / 'licenses' / 'dependencies.json'
+    record = json.loads(path.read_text(encoding='utf-8'))
+    def dependencies(metadata: str) -> set[tuple[str, ...]]:
+        return {tuple(line.split()[1:]) for line in metadata.splitlines()
+                if line.strip().startswith('dep\t')}
+    for name, previous in record['native_artifacts'].items():
+        binary = output / 'tools' / name
+        metadata = run([go, 'version', '-m', str(binary)], cwd=source, env=env, capture=True)
+        lines = metadata.splitlines()
+        lines[0] = 'tools/' + name + ': ' + lock['go_version']
+        metadata = '\n'.join(lines) + '\n'
+        if dependencies(metadata) != dependencies(previous['build_info']):
+            raise RuntimeError('Linked dependencies changed; refresh reviewed license inventory: ' + name)
+        previous.update(sha256=digest(binary), size_bytes=binary.stat().st_size,
+                        build_info=metadata)
+    record.update(release=lock['version'], source_commit=lock['upstream']['commit'],
+                  go_version=run([go, 'version'], cwd=source, env=env, capture=True),
+                  build_time_unix=int(dt.datetime.now(dt.timezone.utc).timestamp()))
+    write_json(path, record)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-root', default=str(Path(__file__).resolve().parents[1]))
@@ -210,6 +234,7 @@ def main() -> int:
     run([go, 'mod', 'verify'], cwd=source / 'upstream', env=env)
     artifacts = {relative: digest(output / relative) for relative in
                  ('Proxima-Miner.exe', 'Wallet-Balance.exe', 'tools/proxi.exe', 'tools/oracle.exe', 'tools/gpu-seeker.exe')}
+    refresh_dependency_record(output, source, go, env, lock)
     seeker = {Path(name).name: value for name, value in sources.items()
               if name.startswith('miner/') and Path(name).suffix in {'.py', '.cl'}}
     info = {'version': lock['version'] + '-source-build', 'source_commit': lock['upstream']['commit'],

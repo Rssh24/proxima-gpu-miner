@@ -17,6 +17,7 @@ import tempfile
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from validation_common import child_path,load_json,sha256,upstream_hashes,verify_hash_map,write_json
+from gpu_hash_validation import check_sha512,check_prefix_boundaries,require_optimization_checks
 
 
 def verify_build(source,package,protocol):
@@ -48,6 +49,34 @@ def verify_build(source,package,protocol):
     return manifest,info,receipt
 
 
+
+def write_manifest_validation(package,report):
+    """Change validation metadata without changing the bound source/artifact maps."""
+    path=package/'build-manifest.json'
+    manifest=load_json(path)
+    passed=report.get('validation_passed') is True and report.get('gpu_validated') is True
+    manifest['validation_passed']=passed
+    manifest['gpu_validation']={
+        'passed':passed,
+        'scope':'Selected GPU/driver only; source-bound synthetic tests',
+        'sha512_cases':report.get('proof_checks',{}).get('sha512',{}).get('cases',0) if passed else 0,
+        'padding_boundary_proofs':report.get('proof_checks',{}).get('padding_boundaries',{}).get('official_proof_checks',0) if passed else 0,
+        'accepted_improvements':report.get('protocol',{}).get('accepted_improvements',0) if passed else 0,
+    }
+    write_json(path,manifest)
+
+
+def invalidate_validation(package):
+    # Invalidate prior success before even attempting hash verification. A failed
+    # revalidation must not leave stale green evidence from an older attempt.
+    compatibility=package/'tools/compatibility-validation.json'
+    report=load_json(compatibility) if compatibility.is_file() else {}
+    report.update(validation_passed=False,gpu_validated=False)
+    report.pop('error',None)
+    write_json(compatibility,report)
+    write_manifest_validation(package,report)
+
+
 def wait_for_gate():
     gate=os.environ.get('PROXIMA_VALIDATION_START_GATE')
     if not gate:raise RuntimeError('Proof worker must be launched by the validator')
@@ -62,6 +91,7 @@ def proof_worker(a):
     package=a.package_root.resolve();data=a.worker_data.resolve()
     os.environ['PROXIMA_MINER_DATA']=str(data)
     sys.path.insert(0,str(package/'miner'))
+    import opencl_backend
     from opencl_backend import OpenCL,enumerate_devices
     from device_config import recommended_device_key,select_device
     from device_profile import device_fingerprint,validate_profile
@@ -77,6 +107,10 @@ def proof_worker(a):
         safe_temperatures(sensor,hotspot)
         cl=OpenCL(key);cl.build();local=choose_local(cl.metadata)
         checks=correctness(cl,sensor,hotspot,local)
+        safe_check=lambda:safe_temperatures(sensor,hotspot)
+        checks['padding_boundaries']=check_prefix_boundaries(cl,Oracle,safe_check,local)
+        checks['sha512']=check_sha512(package/'miner/vrf.cl',opencl_backend,key,safe_check)
+        require_optimization_checks(checks,sha256(package/'miner/vrf.cl'))
         oracle=Oracle(seed=secrets.token_bytes(32));batch=1024
         cl.prepare(oracle.pubkey,oracle.scalar,secrets.token_bytes(37),batch)
         safe_temperatures(sensor,hotspot)
@@ -157,6 +191,7 @@ def main():
         proof_worker(a);return 0
     if not a.protocol_exe:p.error('--protocol-exe is required; compile it with Build-ProtocolTest.ps1')
     source=a.source_root.resolve();package=a.package_root.resolve();protocol=a.protocol_exe.resolve()
+    invalidate_validation(package)
     manifest,info,receipt=verify_build(source,package,protocol)
     compatibility=package/'tools/compatibility-validation.json'
     report=dict(schema_version=1,validation_passed=False,gpu_validated=False,
@@ -176,7 +211,7 @@ def main():
         for key in ('PROXIMA_KEY_PASSPHRASE','NONCE_SEEKER_SEED'):env.pop(key,None)
         proof_gate=fixture/'proof.gate';env['PROXIMA_VALIDATION_START_GATE']=str(proof_gate)
         proof_output=fixture/'proof.json'
-        print('Checking the selected GPU against official RFC and nonce carry/wrap proofs.',flush=True)
+        print('Checking selected-GPU SHA512 lengths0..113, official RFC, padding boundaries and nonce carry/wrap proofs.',flush=True)
         command=[str(package/'tools/python/python.exe'),'-B',str(Path(__file__).resolve()),
                  '--proof-worker','--package-root',str(package),'--source-root',str(source),
                  '--device',a.device,'--worker-data',str(data),'--worker-output',str(proof_output)]
@@ -184,6 +219,7 @@ def main():
         proof=load_json(proof_output)
         if proof.get('passed') is not True or proof.get('checks',{}).get('official_proof_checks',0)<18:
             raise RuntimeError('GPU proof comparison did not complete')
+        require_optimization_checks(proof['checks'],sha256(package/'miner/vrf.cl'))
         protocol_gate=fixture/'protocol.gate';env['PROXIMA_PROTOCOL_START_GATE']=str(protocol_gate)
         env['NONCE_SEEKER_BIN']=str(package/'tools/gpu-seeker.exe')
         print('Checking four accepted improvements with local synthetic plain/encrypted wallets.',flush=True)
@@ -206,12 +242,14 @@ def main():
                       'executable_sha256':receipt['executable_sha256'],'overlay_sha256':receipt['overlay_sha256']},
             elapsed_seconds=round(time.monotonic()-started,3))
         write_json(compatibility,report)
+        write_manifest_validation(package,report)
         if a.output:write_json(a.output.resolve(),report)
         print('Selected GPU proofs and local protocol passed. Exact rebuilt artifacts are now validated.',flush=True)
         return 0
     except Exception as exc:
-        report.update(error=str(exc),elapsed_seconds=round(time.monotonic()-started,3))
+        report.update(validation_passed=False,gpu_validated=False,error=str(exc),elapsed_seconds=round(time.monotonic()-started,3))
         write_json(compatibility,report)
+        write_manifest_validation(package,report)
         if a.output:write_json(a.output.resolve(),report)
         raise
     finally:

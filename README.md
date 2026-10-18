@@ -2,7 +2,7 @@
 
 A community GPU miner for the Proxima Take 1 network, with an English desktop interface and a custom OpenCL nonce seeker. This repository contains the application source and an unmodified snapshot of the official Proxima client.
 
-**Windows beta 0.1.0.** Developed and tested on an AMD Radeon RX 9070 XT. Other AMD and NVIDIA cards are experimental; they must pass their own correctness, telemetry, and setup checks. This is not an official Proxima or GPU-vendor release.
+**Windows beta 0.1.1.** Developed and tested on an AMD Radeon RX 9070 XT. Other AMD and NVIDIA cards are experimental; they must pass their own correctness, telemetry, and setup checks. This is not an official Proxima or GPU-vendor release.
 
 ## Download and start
 
@@ -23,6 +23,20 @@ Only one GPU is used, and CPU mining is disabled. Closing the window leaves mini
 - Session and cumulative counts of locally accepted solutions. These are **not** confirmed rewards or wallet balance.
 
 See the included [runtime guide](assets/README.txt) for thermal thresholds, backup/recovery, power modes, and stopping behavior. Take 1 is experimental: network changes or resets can require an updated client and can affect balances. There is no guaranteed time to a reward.
+
+## Updating from 0.1.0
+
+Stop mining in the old app before switching versions. Back up the encrypted wallet and recovery password separately, extract the new ZIP into a separate folder, and keep your existing data directory (or the same `PROXIMA_MINER_DATA` override).
+
+Run **GPU and wallet setup** again. The new kernel invalidates the old GPU profile; setup checks the new calculations and recalibrates performance and average board power while preserving an existing wallet. Recalibration is an explicit action, not automatic on launch. Setup selects Maximum, so choose your preferred power mode again before starting mining. Keeping the data directory also preserves local cumulative acceptance counts.
+
+## Performance in 0.1.1
+
+The OpenCL kernel uses 10-limb field arithmetic, shares the scalar NAF representation within each workgroup, and reduces SHA-512 scratch storage. It also handles the SHA-512 padding boundary for the longest supported nonce prefix (69 bytes).
+
+On the development RX 9070 XT, a controlled 20-second comparison using the same key measured **1.96M → 3.72M VRF attempts/s**, with average board power **295.52W → 266.56W**. A separate 37-second live-mining sample averaged **3.52M attempts/s at 261.45W**. These are short samples from one card, not NVIDIA results or a promise of sustained performance, accepted solutions, or rewards. Your GPU, driver, temperature, work, and settings affect the result.
+
+See [the changelog](CHANGELOG.md) for the release changes.
 
 ## Data and privacy
 

@@ -33,7 +33,7 @@ The runtime is not downloaded unless `-DownloadRuntime` is explicitly supplied. 
 .\build\Build.ps1 -PythonHome 'C:\BuildTools\python-3.13.7-embed-amd64'
 ```
 
-The default output is `out/windows-beta-0.1.0`. The output path must be new or empty. Use `-OutputDirectory` for another clean directory; do not target an installed user's miner or personal data folder. For example:
+The default output is `out/windows-beta-0.1.1`. The output path must be new or empty. Use `-OutputDirectory` for another clean directory; do not target an installed user's miner or personal data folder. For example:
 
 ```powershell
 .\build\Build.ps1 -Go 'C:\BuildTools\go\bin\go.exe' `
@@ -107,7 +107,7 @@ This is an explicit **real GPU workload**. Close other GPU applications, ensure 
 
 ```powershell
 .\build\Validate.ps1 `
-  -PackageRoot '.\out\windows-beta-0.1.0' `
+  -PackageRoot '.\out\windows-beta-0.1.1' `
   -ProtocolExe '.\build\protocol\protocol-tests.exe' `
   -Device auto
 ```
@@ -120,7 +120,7 @@ After validation, open the built `Proxima-Miner.exe`. Click **GPU and wallet set
 
 ## Making changes and publishing builds
 
-Keep modifications in the custom source directories. The upstream snapshot is pinned; an upstream upgrade requires a deliberate new source identity and review of its network/protocol changes. Rebuild after changes to native code, Python source, or the kernel, and repeat the relevant tests and actual GPU validation. Driver/device changes also require fresh device setup.
+Keep modifications in the custom source directories. The upstream snapshot is pinned; an upstream upgrade requires a deliberate new source identity and review of its network/protocol changes. Rebuild after changes to native code, Python source, or the kernel, and repeat the relevant tests and actual GPU validation. Kernel, driver, and device changes also require fresh device setup. Recipients updating to 0.1.1 must explicitly run GPU and wallet setup again; the old kernel fingerprint cannot authorize the new kernel. Setup preserves an existing wallet, recalibrates power and performance, and selects Maximum.
 
 Before packaging, preserve license notices and covered dependency source, generate artifact/source manifests, and verify the archive against an explicit allowlist. Exclude `.git`, caches, build work, local test outputs, wallet/configuration data, recovery credentials, mining logs, device profiles, and backups. Git excludes generated runtime binaries and downloaded toolchains. Never release an installed user's data directory.
 

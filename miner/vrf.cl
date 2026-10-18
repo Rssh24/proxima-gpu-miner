@@ -6,7 +6,7 @@ typedef uchar u8;
 typedef uint u32;
 typedef ulong u64;
 typedef long i64;
-typedef int gf[16];
+typedef int gf[10];
 static u64 dl64(const u8 *x)
 {
   u64 i,u=0;
@@ -37,60 +37,102 @@ int crypto_verify_32(const u8 *x,const u8 *y)
   return vn(x,y,32);
 }
 
-sv set25519(gf r, const gf a)
-{
-  int i;
-  FOR(i,16) r[i]=a[i];
+sv set25519(gf r,const gf a){for(int i=0;i<10;i++){r[i]=a[i];}}
+
+sv car25519(gf t) {
+int c;
+c=t[0]>>26;
+t[0]-=c*67108864;
+t[1]+=c;
+c=t[1]>>25;
+t[1]-=c*33554432;
+t[2]+=c;
+c=t[2]>>26;
+t[2]-=c*67108864;
+t[3]+=c;
+c=t[3]>>25;
+t[3]-=c*33554432;
+t[4]+=c;
+c=t[4]>>26;
+t[4]-=c*67108864;
+t[5]+=c;
+c=t[5]>>25;
+t[5]-=c*33554432;
+t[6]+=c;
+c=t[6]>>26;
+t[6]-=c*67108864;
+t[7]+=c;
+c=t[7]>>25;
+t[7]-=c*33554432;
+t[8]+=c;
+c=t[8]>>26;
+t[8]-=c*67108864;
+t[9]+=c;
+c=t[9]>>25;
+t[9]-=c*33554432;
+t[0]+=19*c;
 }
 
-sv car25519(gf o)
-{
-  int i,c;
-  // car25519 is used only on reduced or small A/Z limbs in this version.
-  // Unreduced multiplication/square coefficients use field_carry_wide.
-  FOR(i,15) {
-    c=o[i]>>16;
-    o[i]-=c*65536;
-    o[i+1]+=c;
-  }
-  c=o[15]>>16;
-  o[15]-=c*65536;
-  o[0]+=38*c;
-}
+sv sel25519(gf p,gf q,int b){int c=~(b-1); for(int i=0;i<10;i++){int t=c&(p[i]^q[i]); p[i]^=t;q[i]^=t;}}
 
-sv sel25519(gf p,gf q,int b)
-{
-  int t,i,c=~(b-1);
-  FOR(i,16) {
-    t=c&(p[i]^q[i]);
-    p[i]^=t;
-    q[i]^=t;
-  }
+sv pack25519(u8 *o,const gf in){gf t,m;
+set25519(t,in);car25519(t);car25519(t);car25519(t);
+for(int trial=0;trial<2;trial++){
+m[0]=t[0]-67108845;
+m[1]=t[1]-33554431-((m[0]>>26)&1);
+m[0]&=67108863;
+m[2]=t[2]-67108863-((m[1]>>25)&1);
+m[1]&=33554431;
+m[3]=t[3]-33554431-((m[2]>>26)&1);
+m[2]&=67108863;
+m[4]=t[4]-67108863-((m[3]>>25)&1);
+m[3]&=33554431;
+m[5]=t[5]-33554431-((m[4]>>26)&1);
+m[4]&=67108863;
+m[6]=t[6]-67108863-((m[5]>>25)&1);
+m[5]&=33554431;
+m[7]=t[7]-33554431-((m[6]>>26)&1);
+m[6]&=67108863;
+m[8]=t[8]-67108863-((m[7]>>25)&1);
+m[7]&=33554431;
+m[9]=t[9]-33554431-((m[8]>>26)&1);
+m[8]&=67108863;
+int borrow=(m[9]>>25)&1;
+m[9]&=33554431;
+sel25519(t,m,1-borrow);
 }
-
-sv pack25519(u8 *o,const gf n)
-{
-  int i,j,b;
-  gf m,t;
-  FOR(i,16) t[i]=n[i];
-  car25519(t);
-  car25519(t);
-  car25519(t);
-  FOR(j,2) {
-    m[0]=t[0]-0xffed;
-    for(i=1;i<15;i++) {
-      m[i]=t[i]-0xffff-((m[i-1]>>16)&1);
-      m[i-1]&=0xffff;
-    }
-    m[15]=t[15]-0x7fff-((m[14]>>16)&1);
-    b=(m[15]>>16)&1;
-    m[14]&=0xffff;
-    sel25519(t,m,1-b);
-  }
-  FOR(i,16) {
-    o[2*i]=t[i]&0xff;
-    o[2*i+1]=t[i]>>8;
-  }
+o[0]=(u8)(((uint)t[0]>>0));
+o[1]=(u8)(((uint)t[0]>>8));
+o[2]=(u8)(((uint)t[0]>>16));
+o[3]=(u8)(((uint)t[0]>>24)|((uint)t[1]<<2));
+o[4]=(u8)(((uint)t[1]>>6));
+o[5]=(u8)(((uint)t[1]>>14));
+o[6]=(u8)(((uint)t[1]>>22)|((uint)t[2]<<3));
+o[7]=(u8)(((uint)t[2]>>5));
+o[8]=(u8)(((uint)t[2]>>13));
+o[9]=(u8)(((uint)t[2]>>21)|((uint)t[3]<<5));
+o[10]=(u8)(((uint)t[3]>>3));
+o[11]=(u8)(((uint)t[3]>>11));
+o[12]=(u8)(((uint)t[3]>>19)|((uint)t[4]<<6));
+o[13]=(u8)(((uint)t[4]>>2));
+o[14]=(u8)(((uint)t[4]>>10));
+o[15]=(u8)(((uint)t[4]>>18));
+o[16]=(u8)(((uint)t[5]>>0));
+o[17]=(u8)(((uint)t[5]>>8));
+o[18]=(u8)(((uint)t[5]>>16));
+o[19]=(u8)(((uint)t[5]>>24)|((uint)t[6]<<1));
+o[20]=(u8)(((uint)t[6]>>7));
+o[21]=(u8)(((uint)t[6]>>15));
+o[22]=(u8)(((uint)t[6]>>23)|((uint)t[7]<<3));
+o[23]=(u8)(((uint)t[7]>>5));
+o[24]=(u8)(((uint)t[7]>>13));
+o[25]=(u8)(((uint)t[7]>>21)|((uint)t[8]<<4));
+o[26]=(u8)(((uint)t[8]>>4));
+o[27]=(u8)(((uint)t[8]>>12));
+o[28]=(u8)(((uint)t[8]>>20)|((uint)t[9]<<6));
+o[29]=(u8)(((uint)t[9]>>2));
+o[30]=(u8)(((uint)t[9]>>10));
+o[31]=(u8)(((uint)t[9]>>18));
 }
 
 static int neq25519(const gf a, const gf b)
@@ -108,158 +150,112 @@ static u8 par25519(const gf a)
   return d[0]&1;
 }
 
-sv unpack25519(gf o, const u8 *n)
-{
-  int i;
-  FOR(i,16) o[i]=n[2*i]+((i64)n[2*i+1]<<8);
-  o[15]&=0x7fff;
+sv unpack25519(gf o,const u8 *in){
+o[0]=(int)((((uint)in[0]<<0)|((uint)in[1]<<8)|((uint)in[2]<<16)|((uint)in[3]<<24))&67108863u);
+o[1]=(int)((((uint)in[3]>>2)|((uint)in[4]<<6)|((uint)in[5]<<14)|((uint)in[6]<<22))&33554431u);
+o[2]=(int)((((uint)in[6]>>3)|((uint)in[7]<<5)|((uint)in[8]<<13)|((uint)in[9]<<21))&67108863u);
+o[3]=(int)((((uint)in[9]>>5)|((uint)in[10]<<3)|((uint)in[11]<<11)|((uint)in[12]<<19))&33554431u);
+o[4]=(int)((((uint)in[12]>>6)|((uint)in[13]<<2)|((uint)in[14]<<10)|((uint)in[15]<<18))&67108863u);
+o[5]=(int)((((uint)in[16]<<0)|((uint)in[17]<<8)|((uint)in[18]<<16)|((uint)in[19]<<24))&33554431u);
+o[6]=(int)((((uint)in[19]>>1)|((uint)in[20]<<7)|((uint)in[21]<<15)|((uint)in[22]<<23))&67108863u);
+o[7]=(int)((((uint)in[22]>>3)|((uint)in[23]<<5)|((uint)in[24]<<13)|((uint)in[25]<<21))&33554431u);
+o[8]=(int)((((uint)in[25]>>4)|((uint)in[26]<<4)|((uint)in[27]<<12)|((uint)in[28]<<20))&67108863u);
+o[9]=(int)((((uint)in[28]>>6)|((uint)in[29]<<2)|((uint)in[30]<<10)|((uint)in[31]<<18))&33554431u);
 }
 
-sv A(gf o,const gf a,const gf b)
-{
-  int i;
-  FOR(i,16) o[i]=a[i]+b[i];
-}
+sv A(gf o,const gf a,const gf b){for(int i=0;i<10;i++){o[i]=a[i]+b[i];}}
 
-sv Z(gf o,const gf a,const gf b)
-{
-  int i;
-  FOR(i,16) o[i]=a[i]-b[i];
-}
+sv Z(gf o,const gf a,const gf b){for(int i=0;i<10;i++){o[i]=a[i]-b[i];}}
 
-// Fold x^16=38 before carrying; all products remain signed 64-bit.
+// Alternating 26/25-bit limbs; fold powers of 2^255 using 2^255 = 19.
+// M/S input bound: abs(limb[i]) <= 4 * 2^width[i] + 128.
+// The largest coefficient is <= 8971182277476401152 < INT64_MAX.
+// Keep this bound when changing the field-operation call graph.
 // Exact radix-65536 carry, wide until both passes are finished.
-sv field_carry_wide(i64 t[16])
-{
-  i64 c;
-  c=t[0]>>16;
-  t[0]-=c*65536L;
-  t[1]+=c;
-  c=t[1]>>16;
-  t[1]-=c*65536L;
-  t[2]+=c;
-  c=t[2]>>16;
-  t[2]-=c*65536L;
-  t[3]+=c;
-  c=t[3]>>16;
-  t[3]-=c*65536L;
-  t[4]+=c;
-  c=t[4]>>16;
-  t[4]-=c*65536L;
-  t[5]+=c;
-  c=t[5]>>16;
-  t[5]-=c*65536L;
-  t[6]+=c;
-  c=t[6]>>16;
-  t[6]-=c*65536L;
-  t[7]+=c;
-  c=t[7]>>16;
-  t[7]-=c*65536L;
-  t[8]+=c;
-  c=t[8]>>16;
-  t[8]-=c*65536L;
-  t[9]+=c;
-  c=t[9]>>16;
-  t[9]-=c*65536L;
-  t[10]+=c;
-  c=t[10]>>16;
-  t[10]-=c*65536L;
-  t[11]+=c;
-  c=t[11]>>16;
-  t[11]-=c*65536L;
-  t[12]+=c;
-  c=t[12]>>16;
-  t[12]-=c*65536L;
-  t[13]+=c;
-  c=t[13]>>16;
-  t[13]-=c*65536L;
-  t[14]+=c;
-  c=t[14]>>16;
-  t[14]-=c*65536L;
-  t[15]+=c;
-  c=t[15]>>16;
-  t[15]-=c*65536L;
-  t[0]+=38*c;
+sv field_carry_wide(i64 t[10]) {
+i64 c;
+c=t[0]>>26;
+t[0]-=c*67108864L;
+t[1]+=c;
+c=t[1]>>25;
+t[1]-=c*33554432L;
+t[2]+=c;
+c=t[2]>>26;
+t[2]-=c*67108864L;
+t[3]+=c;
+c=t[3]>>25;
+t[3]-=c*33554432L;
+t[4]+=c;
+c=t[4]>>26;
+t[4]-=c*67108864L;
+t[5]+=c;
+c=t[5]>>25;
+t[5]-=c*33554432L;
+t[6]+=c;
+c=t[6]>>26;
+t[6]-=c*67108864L;
+t[7]+=c;
+c=t[7]>>25;
+t[7]-=c*33554432L;
+t[8]+=c;
+c=t[8]>>26;
+t[8]-=c*67108864L;
+t[9]+=c;
+c=t[9]>>25;
+t[9]-=c*33554432L;
+t[0]+=19*c;
 }
 
-sv M(gf o,const gf a,const gf b)
-{
-  i64 t[16];
-  t[0]=((i64)a[0]*b[0]) + 38*((i64)a[1]*b[15] + (i64)a[2]*b[14] + (i64)a[3]*b[13] + (i64)a[4]*b[12] + (i64)a[5]*b[11] + (i64)a[6]*b[10] + (i64)a[7]*b[9] + (i64)a[8]*b[8] + (i64)a[9]*b[7] + (i64)a[10]*b[6] + (i64)a[11]*b[5] + (i64)a[12]*b[4] + (i64)a[13]*b[3] + (i64)a[14]*b[2] + (i64)a[15]*b[1]);
-  t[1]=((i64)a[0]*b[1] + (i64)a[1]*b[0]) + 38*((i64)a[2]*b[15] + (i64)a[3]*b[14] + (i64)a[4]*b[13] + (i64)a[5]*b[12] + (i64)a[6]*b[11] + (i64)a[7]*b[10] + (i64)a[8]*b[9] + (i64)a[9]*b[8] + (i64)a[10]*b[7] + (i64)a[11]*b[6] + (i64)a[12]*b[5] + (i64)a[13]*b[4] + (i64)a[14]*b[3] + (i64)a[15]*b[2]);
-  t[2]=((i64)a[0]*b[2] + (i64)a[1]*b[1] + (i64)a[2]*b[0]) + 38*((i64)a[3]*b[15] + (i64)a[4]*b[14] + (i64)a[5]*b[13] + (i64)a[6]*b[12] + (i64)a[7]*b[11] + (i64)a[8]*b[10] + (i64)a[9]*b[9] + (i64)a[10]*b[8] + (i64)a[11]*b[7] + (i64)a[12]*b[6] + (i64)a[13]*b[5] + (i64)a[14]*b[4] + (i64)a[15]*b[3]);
-  t[3]=((i64)a[0]*b[3] + (i64)a[1]*b[2] + (i64)a[2]*b[1] + (i64)a[3]*b[0]) + 38*((i64)a[4]*b[15] + (i64)a[5]*b[14] + (i64)a[6]*b[13] + (i64)a[7]*b[12] + (i64)a[8]*b[11] + (i64)a[9]*b[10] + (i64)a[10]*b[9] + (i64)a[11]*b[8] + (i64)a[12]*b[7] + (i64)a[13]*b[6] + (i64)a[14]*b[5] + (i64)a[15]*b[4]);
-  t[4]=((i64)a[0]*b[4] + (i64)a[1]*b[3] + (i64)a[2]*b[2] + (i64)a[3]*b[1] + (i64)a[4]*b[0]) + 38*((i64)a[5]*b[15] + (i64)a[6]*b[14] + (i64)a[7]*b[13] + (i64)a[8]*b[12] + (i64)a[9]*b[11] + (i64)a[10]*b[10] + (i64)a[11]*b[9] + (i64)a[12]*b[8] + (i64)a[13]*b[7] + (i64)a[14]*b[6] + (i64)a[15]*b[5]);
-  t[5]=((i64)a[0]*b[5] + (i64)a[1]*b[4] + (i64)a[2]*b[3] + (i64)a[3]*b[2] + (i64)a[4]*b[1] + (i64)a[5]*b[0]) + 38*((i64)a[6]*b[15] + (i64)a[7]*b[14] + (i64)a[8]*b[13] + (i64)a[9]*b[12] + (i64)a[10]*b[11] + (i64)a[11]*b[10] + (i64)a[12]*b[9] + (i64)a[13]*b[8] + (i64)a[14]*b[7] + (i64)a[15]*b[6]);
-  t[6]=((i64)a[0]*b[6] + (i64)a[1]*b[5] + (i64)a[2]*b[4] + (i64)a[3]*b[3] + (i64)a[4]*b[2] + (i64)a[5]*b[1] + (i64)a[6]*b[0]) + 38*((i64)a[7]*b[15] + (i64)a[8]*b[14] + (i64)a[9]*b[13] + (i64)a[10]*b[12] + (i64)a[11]*b[11] + (i64)a[12]*b[10] + (i64)a[13]*b[9] + (i64)a[14]*b[8] + (i64)a[15]*b[7]);
-  t[7]=((i64)a[0]*b[7] + (i64)a[1]*b[6] + (i64)a[2]*b[5] + (i64)a[3]*b[4] + (i64)a[4]*b[3] + (i64)a[5]*b[2] + (i64)a[6]*b[1] + (i64)a[7]*b[0]) + 38*((i64)a[8]*b[15] + (i64)a[9]*b[14] + (i64)a[10]*b[13] + (i64)a[11]*b[12] + (i64)a[12]*b[11] + (i64)a[13]*b[10] + (i64)a[14]*b[9] + (i64)a[15]*b[8]);
-  t[8]=((i64)a[0]*b[8] + (i64)a[1]*b[7] + (i64)a[2]*b[6] + (i64)a[3]*b[5] + (i64)a[4]*b[4] + (i64)a[5]*b[3] + (i64)a[6]*b[2] + (i64)a[7]*b[1] + (i64)a[8]*b[0]) + 38*((i64)a[9]*b[15] + (i64)a[10]*b[14] + (i64)a[11]*b[13] + (i64)a[12]*b[12] + (i64)a[13]*b[11] + (i64)a[14]*b[10] + (i64)a[15]*b[9]);
-  t[9]=((i64)a[0]*b[9] + (i64)a[1]*b[8] + (i64)a[2]*b[7] + (i64)a[3]*b[6] + (i64)a[4]*b[5] + (i64)a[5]*b[4] + (i64)a[6]*b[3] + (i64)a[7]*b[2] + (i64)a[8]*b[1] + (i64)a[9]*b[0]) + 38*((i64)a[10]*b[15] + (i64)a[11]*b[14] + (i64)a[12]*b[13] + (i64)a[13]*b[12] + (i64)a[14]*b[11] + (i64)a[15]*b[10]);
-  t[10]=((i64)a[0]*b[10] + (i64)a[1]*b[9] + (i64)a[2]*b[8] + (i64)a[3]*b[7] + (i64)a[4]*b[6] + (i64)a[5]*b[5] + (i64)a[6]*b[4] + (i64)a[7]*b[3] + (i64)a[8]*b[2] + (i64)a[9]*b[1] + (i64)a[10]*b[0]) + 38*((i64)a[11]*b[15] + (i64)a[12]*b[14] + (i64)a[13]*b[13] + (i64)a[14]*b[12] + (i64)a[15]*b[11]);
-  t[11]=((i64)a[0]*b[11] + (i64)a[1]*b[10] + (i64)a[2]*b[9] + (i64)a[3]*b[8] + (i64)a[4]*b[7] + (i64)a[5]*b[6] + (i64)a[6]*b[5] + (i64)a[7]*b[4] + (i64)a[8]*b[3] + (i64)a[9]*b[2] + (i64)a[10]*b[1] + (i64)a[11]*b[0]) + 38*((i64)a[12]*b[15] + (i64)a[13]*b[14] + (i64)a[14]*b[13] + (i64)a[15]*b[12]);
-  t[12]=((i64)a[0]*b[12] + (i64)a[1]*b[11] + (i64)a[2]*b[10] + (i64)a[3]*b[9] + (i64)a[4]*b[8] + (i64)a[5]*b[7] + (i64)a[6]*b[6] + (i64)a[7]*b[5] + (i64)a[8]*b[4] + (i64)a[9]*b[3] + (i64)a[10]*b[2] + (i64)a[11]*b[1] + (i64)a[12]*b[0]) + 38*((i64)a[13]*b[15] + (i64)a[14]*b[14] + (i64)a[15]*b[13]);
-  t[13]=((i64)a[0]*b[13] + (i64)a[1]*b[12] + (i64)a[2]*b[11] + (i64)a[3]*b[10] + (i64)a[4]*b[9] + (i64)a[5]*b[8] + (i64)a[6]*b[7] + (i64)a[7]*b[6] + (i64)a[8]*b[5] + (i64)a[9]*b[4] + (i64)a[10]*b[3] + (i64)a[11]*b[2] + (i64)a[12]*b[1] + (i64)a[13]*b[0]) + 38*((i64)a[14]*b[15] + (i64)a[15]*b[14]);
-  t[14]=((i64)a[0]*b[14] + (i64)a[1]*b[13] + (i64)a[2]*b[12] + (i64)a[3]*b[11] + (i64)a[4]*b[10] + (i64)a[5]*b[9] + (i64)a[6]*b[8] + (i64)a[7]*b[7] + (i64)a[8]*b[6] + (i64)a[9]*b[5] + (i64)a[10]*b[4] + (i64)a[11]*b[3] + (i64)a[12]*b[2] + (i64)a[13]*b[1] + (i64)a[14]*b[0]) + 38*((i64)a[15]*b[15]);
-  t[15]=((i64)a[0]*b[15] + (i64)a[1]*b[14] + (i64)a[2]*b[13] + (i64)a[3]*b[12] + (i64)a[4]*b[11] + (i64)a[5]*b[10] + (i64)a[6]*b[9] + (i64)a[7]*b[8] + (i64)a[8]*b[7] + (i64)a[9]*b[6] + (i64)a[10]*b[5] + (i64)a[11]*b[4] + (i64)a[12]*b[3] + (i64)a[13]*b[2] + (i64)a[14]*b[1] + (i64)a[15]*b[0]);
-  field_carry_wide(t);
-  field_carry_wide(t);
-  // Narrow only the final reduced limbs, after all input reads.
-  o[0]=(int)t[0];
-  o[1]=(int)t[1];
-  o[2]=(int)t[2];
-  o[3]=(int)t[3];
-  o[4]=(int)t[4];
-  o[5]=(int)t[5];
-  o[6]=(int)t[6];
-  o[7]=(int)t[7];
-  o[8]=(int)t[8];
-  o[9]=(int)t[9];
-  o[10]=(int)t[10];
-  o[11]=(int)t[11];
-  o[12]=(int)t[12];
-  o[13]=(int)t[13];
-  o[14]=(int)t[14];
-  o[15]=(int)t[15];
+sv M(gf o,const gf a,const gf b) {
+i64 t[10];
+t[0]=((i64)a[0]*b[0])+38*((i64)a[1]*b[9])+19*((i64)a[2]*b[8])+38*((i64)a[3]*b[7])+19*((i64)a[4]*b[6])+38*((i64)a[5]*b[5])+19*((i64)a[6]*b[4])+38*((i64)a[7]*b[3])+19*((i64)a[8]*b[2])+38*((i64)a[9]*b[1]);
+t[1]=((i64)a[0]*b[1])+((i64)a[1]*b[0])+19*((i64)a[2]*b[9])+19*((i64)a[3]*b[8])+19*((i64)a[4]*b[7])+19*((i64)a[5]*b[6])+19*((i64)a[6]*b[5])+19*((i64)a[7]*b[4])+19*((i64)a[8]*b[3])+19*((i64)a[9]*b[2]);
+t[2]=((i64)a[0]*b[2])+2*((i64)a[1]*b[1])+((i64)a[2]*b[0])+38*((i64)a[3]*b[9])+19*((i64)a[4]*b[8])+38*((i64)a[5]*b[7])+19*((i64)a[6]*b[6])+38*((i64)a[7]*b[5])+19*((i64)a[8]*b[4])+38*((i64)a[9]*b[3]);
+t[3]=((i64)a[0]*b[3])+((i64)a[1]*b[2])+((i64)a[2]*b[1])+((i64)a[3]*b[0])+19*((i64)a[4]*b[9])+19*((i64)a[5]*b[8])+19*((i64)a[6]*b[7])+19*((i64)a[7]*b[6])+19*((i64)a[8]*b[5])+19*((i64)a[9]*b[4]);
+t[4]=((i64)a[0]*b[4])+2*((i64)a[1]*b[3])+((i64)a[2]*b[2])+2*((i64)a[3]*b[1])+((i64)a[4]*b[0])+38*((i64)a[5]*b[9])+19*((i64)a[6]*b[8])+38*((i64)a[7]*b[7])+19*((i64)a[8]*b[6])+38*((i64)a[9]*b[5]);
+t[5]=((i64)a[0]*b[5])+((i64)a[1]*b[4])+((i64)a[2]*b[3])+((i64)a[3]*b[2])+((i64)a[4]*b[1])+((i64)a[5]*b[0])+19*((i64)a[6]*b[9])+19*((i64)a[7]*b[8])+19*((i64)a[8]*b[7])+19*((i64)a[9]*b[6]);
+t[6]=((i64)a[0]*b[6])+2*((i64)a[1]*b[5])+((i64)a[2]*b[4])+2*((i64)a[3]*b[3])+((i64)a[4]*b[2])+2*((i64)a[5]*b[1])+((i64)a[6]*b[0])+38*((i64)a[7]*b[9])+19*((i64)a[8]*b[8])+38*((i64)a[9]*b[7]);
+t[7]=((i64)a[0]*b[7])+((i64)a[1]*b[6])+((i64)a[2]*b[5])+((i64)a[3]*b[4])+((i64)a[4]*b[3])+((i64)a[5]*b[2])+((i64)a[6]*b[1])+((i64)a[7]*b[0])+19*((i64)a[8]*b[9])+19*((i64)a[9]*b[8]);
+t[8]=((i64)a[0]*b[8])+2*((i64)a[1]*b[7])+((i64)a[2]*b[6])+2*((i64)a[3]*b[5])+((i64)a[4]*b[4])+2*((i64)a[5]*b[3])+((i64)a[6]*b[2])+2*((i64)a[7]*b[1])+((i64)a[8]*b[0])+38*((i64)a[9]*b[9]);
+t[9]=((i64)a[0]*b[9])+((i64)a[1]*b[8])+((i64)a[2]*b[7])+((i64)a[3]*b[6])+((i64)a[4]*b[5])+((i64)a[5]*b[4])+((i64)a[6]*b[3])+((i64)a[7]*b[2])+((i64)a[8]*b[1])+((i64)a[9]*b[0]);
+field_carry_wide(t);
+field_carry_wide(t);
+o[0]=(int)t[0];
+o[1]=(int)t[1];
+o[2]=(int)t[2];
+o[3]=(int)t[3];
+o[4]=(int)t[4];
+o[5]=(int)t[5];
+o[6]=(int)t[6];
+o[7]=(int)t[7];
+o[8]=(int)t[8];
+o[9]=(int)t[9];
 }
 
-sv S(gf o,const gf a)
-{
-  i64 t[16];
-  t[0]=(((i64)a[0]*a[0])) + 38*(2*((i64)a[1]*a[15]) + 2*((i64)a[2]*a[14]) + 2*((i64)a[3]*a[13]) + 2*((i64)a[4]*a[12]) + 2*((i64)a[5]*a[11]) + 2*((i64)a[6]*a[10]) + 2*((i64)a[7]*a[9]) + ((i64)a[8]*a[8]));
-  t[1]=(2*((i64)a[0]*a[1])) + 38*(2*((i64)a[2]*a[15]) + 2*((i64)a[3]*a[14]) + 2*((i64)a[4]*a[13]) + 2*((i64)a[5]*a[12]) + 2*((i64)a[6]*a[11]) + 2*((i64)a[7]*a[10]) + 2*((i64)a[8]*a[9]));
-  t[2]=(2*((i64)a[0]*a[2]) + ((i64)a[1]*a[1])) + 38*(2*((i64)a[3]*a[15]) + 2*((i64)a[4]*a[14]) + 2*((i64)a[5]*a[13]) + 2*((i64)a[6]*a[12]) + 2*((i64)a[7]*a[11]) + 2*((i64)a[8]*a[10]) + ((i64)a[9]*a[9]));
-  t[3]=(2*((i64)a[0]*a[3]) + 2*((i64)a[1]*a[2])) + 38*(2*((i64)a[4]*a[15]) + 2*((i64)a[5]*a[14]) + 2*((i64)a[6]*a[13]) + 2*((i64)a[7]*a[12]) + 2*((i64)a[8]*a[11]) + 2*((i64)a[9]*a[10]));
-  t[4]=(2*((i64)a[0]*a[4]) + 2*((i64)a[1]*a[3]) + ((i64)a[2]*a[2])) + 38*(2*((i64)a[5]*a[15]) + 2*((i64)a[6]*a[14]) + 2*((i64)a[7]*a[13]) + 2*((i64)a[8]*a[12]) + 2*((i64)a[9]*a[11]) + ((i64)a[10]*a[10]));
-  t[5]=(2*((i64)a[0]*a[5]) + 2*((i64)a[1]*a[4]) + 2*((i64)a[2]*a[3])) + 38*(2*((i64)a[6]*a[15]) + 2*((i64)a[7]*a[14]) + 2*((i64)a[8]*a[13]) + 2*((i64)a[9]*a[12]) + 2*((i64)a[10]*a[11]));
-  t[6]=(2*((i64)a[0]*a[6]) + 2*((i64)a[1]*a[5]) + 2*((i64)a[2]*a[4]) + ((i64)a[3]*a[3])) + 38*(2*((i64)a[7]*a[15]) + 2*((i64)a[8]*a[14]) + 2*((i64)a[9]*a[13]) + 2*((i64)a[10]*a[12]) + ((i64)a[11]*a[11]));
-  t[7]=(2*((i64)a[0]*a[7]) + 2*((i64)a[1]*a[6]) + 2*((i64)a[2]*a[5]) + 2*((i64)a[3]*a[4])) + 38*(2*((i64)a[8]*a[15]) + 2*((i64)a[9]*a[14]) + 2*((i64)a[10]*a[13]) + 2*((i64)a[11]*a[12]));
-  t[8]=(2*((i64)a[0]*a[8]) + 2*((i64)a[1]*a[7]) + 2*((i64)a[2]*a[6]) + 2*((i64)a[3]*a[5]) + ((i64)a[4]*a[4])) + 38*(2*((i64)a[9]*a[15]) + 2*((i64)a[10]*a[14]) + 2*((i64)a[11]*a[13]) + ((i64)a[12]*a[12]));
-  t[9]=(2*((i64)a[0]*a[9]) + 2*((i64)a[1]*a[8]) + 2*((i64)a[2]*a[7]) + 2*((i64)a[3]*a[6]) + 2*((i64)a[4]*a[5])) + 38*(2*((i64)a[10]*a[15]) + 2*((i64)a[11]*a[14]) + 2*((i64)a[12]*a[13]));
-  t[10]=(2*((i64)a[0]*a[10]) + 2*((i64)a[1]*a[9]) + 2*((i64)a[2]*a[8]) + 2*((i64)a[3]*a[7]) + 2*((i64)a[4]*a[6]) + ((i64)a[5]*a[5])) + 38*(2*((i64)a[11]*a[15]) + 2*((i64)a[12]*a[14]) + ((i64)a[13]*a[13]));
-  t[11]=(2*((i64)a[0]*a[11]) + 2*((i64)a[1]*a[10]) + 2*((i64)a[2]*a[9]) + 2*((i64)a[3]*a[8]) + 2*((i64)a[4]*a[7]) + 2*((i64)a[5]*a[6])) + 38*(2*((i64)a[12]*a[15]) + 2*((i64)a[13]*a[14]));
-  t[12]=(2*((i64)a[0]*a[12]) + 2*((i64)a[1]*a[11]) + 2*((i64)a[2]*a[10]) + 2*((i64)a[3]*a[9]) + 2*((i64)a[4]*a[8]) + 2*((i64)a[5]*a[7]) + ((i64)a[6]*a[6])) + 38*(2*((i64)a[13]*a[15]) + ((i64)a[14]*a[14]));
-  t[13]=(2*((i64)a[0]*a[13]) + 2*((i64)a[1]*a[12]) + 2*((i64)a[2]*a[11]) + 2*((i64)a[3]*a[10]) + 2*((i64)a[4]*a[9]) + 2*((i64)a[5]*a[8]) + 2*((i64)a[6]*a[7])) + 38*(2*((i64)a[14]*a[15]));
-  t[14]=(2*((i64)a[0]*a[14]) + 2*((i64)a[1]*a[13]) + 2*((i64)a[2]*a[12]) + 2*((i64)a[3]*a[11]) + 2*((i64)a[4]*a[10]) + 2*((i64)a[5]*a[9]) + 2*((i64)a[6]*a[8]) + ((i64)a[7]*a[7])) + 38*(((i64)a[15]*a[15]));
-  t[15]=(2*((i64)a[0]*a[15]) + 2*((i64)a[1]*a[14]) + 2*((i64)a[2]*a[13]) + 2*((i64)a[3]*a[12]) + 2*((i64)a[4]*a[11]) + 2*((i64)a[5]*a[10]) + 2*((i64)a[6]*a[9]) + 2*((i64)a[7]*a[8]));
-  field_carry_wide(t);
-  field_carry_wide(t);
-  // Narrow only the final reduced limbs, after all input reads.
-  o[0]=(int)t[0];
-  o[1]=(int)t[1];
-  o[2]=(int)t[2];
-  o[3]=(int)t[3];
-  o[4]=(int)t[4];
-  o[5]=(int)t[5];
-  o[6]=(int)t[6];
-  o[7]=(int)t[7];
-  o[8]=(int)t[8];
-  o[9]=(int)t[9];
-  o[10]=(int)t[10];
-  o[11]=(int)t[11];
-  o[12]=(int)t[12];
-  o[13]=(int)t[13];
-  o[14]=(int)t[14];
-  o[15]=(int)t[15];
+sv S(gf o,const gf a) {
+i64 t[10];
+t[0]=((i64)a[0]*a[0])+76*((i64)a[1]*a[9])+38*((i64)a[2]*a[8])+76*((i64)a[3]*a[7])+38*((i64)a[4]*a[6])+38*((i64)a[5]*a[5]);
+t[1]=2*((i64)a[0]*a[1])+38*((i64)a[2]*a[9])+38*((i64)a[3]*a[8])+38*((i64)a[4]*a[7])+38*((i64)a[5]*a[6]);
+t[2]=2*((i64)a[0]*a[2])+2*((i64)a[1]*a[1])+76*((i64)a[3]*a[9])+38*((i64)a[4]*a[8])+76*((i64)a[5]*a[7])+19*((i64)a[6]*a[6]);
+t[3]=2*((i64)a[0]*a[3])+2*((i64)a[1]*a[2])+38*((i64)a[4]*a[9])+38*((i64)a[5]*a[8])+38*((i64)a[6]*a[7]);
+t[4]=2*((i64)a[0]*a[4])+4*((i64)a[1]*a[3])+((i64)a[2]*a[2])+76*((i64)a[5]*a[9])+38*((i64)a[6]*a[8])+38*((i64)a[7]*a[7]);
+t[5]=2*((i64)a[0]*a[5])+2*((i64)a[1]*a[4])+2*((i64)a[2]*a[3])+38*((i64)a[6]*a[9])+38*((i64)a[7]*a[8]);
+t[6]=2*((i64)a[0]*a[6])+4*((i64)a[1]*a[5])+2*((i64)a[2]*a[4])+2*((i64)a[3]*a[3])+76*((i64)a[7]*a[9])+19*((i64)a[8]*a[8]);
+t[7]=2*((i64)a[0]*a[7])+2*((i64)a[1]*a[6])+2*((i64)a[2]*a[5])+2*((i64)a[3]*a[4])+38*((i64)a[8]*a[9]);
+t[8]=2*((i64)a[0]*a[8])+4*((i64)a[1]*a[7])+2*((i64)a[2]*a[6])+4*((i64)a[3]*a[5])+((i64)a[4]*a[4])+38*((i64)a[9]*a[9]);
+t[9]=2*((i64)a[0]*a[9])+2*((i64)a[1]*a[8])+2*((i64)a[2]*a[7])+2*((i64)a[3]*a[6])+2*((i64)a[4]*a[5]);
+field_carry_wide(t);
+field_carry_wide(t);
+o[0]=(int)t[0];
+o[1]=(int)t[1];
+o[2]=(int)t[2];
+o[3]=(int)t[3];
+o[4]=(int)t[4];
+o[5]=(int)t[5];
+o[6]=(int)t[6];
+o[7]=(int)t[7];
+o[8]=(int)t[8];
+o[9]=(int)t[9];
 }
 
 // Fixed addition chain: z^(2^250-1), retaining z^11 for inversion.
@@ -386,35 +382,28 @@ __constant u8 iv[64] = {
   0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79
 } ;
 
+// Specialized for the kernel's 35-byte / <=113-byte messages.
 int crypto_hash(u8 *out,const u8 *m,u64 n)
 {
-  u8 h[64],x[256];
-  u64 i,b = n;
-
-  FOR(i,64) h[i] = iv[i];
-
-  crypto_hashblocks(h,m,n);
-  m += n;
-  n &= 127;
-  m -= n;
-
-  FOR(i,256) x[i] = 0;
-  FOR(i,n) x[i] = m[i];
-  x[n] = 128;
-
-  n = 256-128*(n<112);
-  x[n-9] = b >> 61;
-  ts64(x+n-8,b<<3);
-  crypto_hashblocks(h,x,n);
-
-  FOR(i,64) out[i] = h[i];
-
+  u8 h[64],x[128];
+  for(int i=0;i<64;++i) h[i]=iv[i];
+  for(int i=0;i<128;++i) x[i]=0;
+  for(uint i=0;i<(uint)n;++i) x[i]=m[i];
+  x[n]=128;
+  if(n>=112) {
+    crypto_hashblocks(h,x,128);
+    for(int i=0;i<128;++i) x[i]=0;
+  }
+  ts64(x+120,n<<3);
+  crypto_hashblocks(h,x,128);
+  for(int i=0;i<64;++i) out[i]=h[i];
   return 0;
 }
 
+
 sv add(gf p[4],gf q[4])
 {
-  const gf D2={0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406};
+  const gf D2={0x2b2f159,0x1a6e509,0x22add7a,0xd4141d,0x38052,0xf3d130,0x3407977,0x19ce331,0x1c56dff,0x901b67};
 
   gf a,b,c,d,t,e,f,g,h;
   
@@ -460,7 +449,7 @@ sv pack(u8 *r,gf p[4])
 // Extended Edwards coordinates, a=-1: 4M+4S (dbl-2008-hwcd).
 sv point_double(gf p[4])
 {
-  const gf zero={0};
+  const gf zero={0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
   gf a,b,c,e,f,g,h;
   S(a,p[0]);
   S(b,p[1]);
@@ -483,7 +472,7 @@ sv point_double(gf p[4])
 // Destructive private point cache: (Y-X, Y+X, 2Z, 2dT).
 sv point_cache(gf q[4])
 {
-  const gf D2={0xf159,0x26b2,0x9b94,0xebd6,0xb156,0x8283,0x149a,0x00e0,0xd130,0xeef3,0x80f2,0x198e,0xfce7,0x56df,0xd9dc,0x2406};
+  const gf D2={0x2b2f159,0x1a6e509,0x22add7a,0xd4141d,0x38052,0xf3d130,0x3407977,0x19ce331,0x1c56dff,0x901b67};
   gf x;
   set25519(x,q[0]);
   Z(q[0],q[1],x);
@@ -526,8 +515,8 @@ sv add_cached(gf p[4],gf q[4],int negative)
 sv scalarmult(gf p[4],gf q[4],const u8 *s)
 {
 
-  const gf gf0={0};
-  const gf gf1={1};
+  const gf gf0={0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
+  const gf gf1={0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
   set25519(p[0],gf0);
   set25519(p[1],gf1);
   set25519(p[2],gf1);
@@ -555,9 +544,9 @@ sv scalarmult(gf p[4],gf q[4],const u8 *s)
 
 sv scalarbase(gf p[4],const u8 *s)
 {
-  const gf X={0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169};
-  const gf Y={0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666};
-  const gf gf1={1};
+  const gf X={0x325d51a,0x18b5823,0xf6592a,0x104a92d,0x1a4b31d,0x1d6dc5c,0x27118fe,0x7fd814,0x13cd6e5,0x85a4db};
+  const gf Y={0x2666658,0x1999999,0xcccccc,0x1333333,0x1999999,0x666666,0x3333333,0xcccccc,0x2666666,0x1999999};
+  const gf gf1={0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
 
   gf q[4];
   set25519(q[0],X);
@@ -569,10 +558,10 @@ sv scalarbase(gf p[4],const u8 *s)
 
 static int unpackneg(gf r[4],const u8 p[32])
 {
-  const gf gf0={0};
-  const gf gf1={1};
-  const gf D={0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d, 0x0070, 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee, 0x5203};
-  const gf I={0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83};
+  const gf gf0={0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
+  const gf gf1={0x1,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
+  const gf D={0x35978a3,0xd37284,0x3156ebd,0x6a0a0e,0x1c029,0x179e898,0x3a03cbb,0x1ce7198,0x2e2b6ff,0x1480db3};
+  const gf I={0x20ea0b0,0x186c9d2,0x8f189d,0x35697f,0xbd0c60,0x1fbd7a7,0x2804c9e,0x1e16569,0x4fc1d,0xae0c92};
 
   gf t, chk, num, den, den2, den4, den6;
   set25519(r[2],gf1);
@@ -609,16 +598,61 @@ static int unpackneg(gf r[4],const u8 p[32])
 }
 
 
+
+// The leading nonzero NAF digit of an unsigned scalar is +1. Starting at Q
+// avoids doubling the identity and adding the first Q; zero retains identity.
+sv scalarmult_shared_naf(gf p[4],gf q[4],__local const char *naf,
+                         __local const int *naf_top)
+{
+  const gf gf0={0};
+  const gf gf1={1};
+  int top=naf_top[0];
+  if(top<0) {
+    set25519(p[0],gf0); set25519(p[1],gf1);
+    set25519(p[2],gf1); set25519(p[3],gf0);
+    return;
+  }
+  for(int j=0;j<4;++j) set25519(p[j],q[j]);
+  point_cache(q);
+  for(int i=top-1;i>=0;--i) {
+    int digit=(int)naf[i];
+    point_double(p);
+    if(digit) add_cached(p,q,digit<0);
+  }
+}
+
 // Single work item = full VRF evaluation. Scalar is uploaded as a runtime buffer.
 __kernel void vrf_batch(__global const u8 *pubkey, __global const u8 *scalar,
                         __global const u8 *prefix, uint prefix_len,
                         ulong start, uint with_nonce, __global u8 *outputs) {
   size_t gid = get_global_id(0);
-  u8 msg[112], digest[64], sc[32], beta_msg[35], encoded[32];
+
+  __local char shared_naf[257];
+  __local int shared_naf_top[1];
+  if(get_local_id(0)==0) {
+    uint carry=0;
+    for(int j=0;j<32;++j) {
+      uint sj=(uint)scalar[j], v=3*sj+carry;
+      carry=v>>8;
+      for(int b=0;b<8;++b) {
+        int pos=j*8+b;
+        if(pos) shared_naf[pos-1]=(char)((int)((v>>b)&1)-(int)((sj>>b)&1));
+      }
+    }
+    shared_naf[255]=(char)(carry&1);
+    shared_naf[256]=(char)((carry>>1)&1);
+    int top=256;
+    while(top>=0 && shared_naf[top]==0) --top;
+    shared_naf_top[0]=top;
+  }
+  // All work items reach this barrier, before any divergent search or return.
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  u8 msg[128], digest[64], beta_msg[35], encoded[32];
   gf h[4], gamma[4];
-  const gf gf0={0};
+  const gf gf0={0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
   msg[0]=3; msg[1]=1;
-  for(int i=0;i<32;i++){msg[2+i]=pubkey[i]; sc[i]=scalar[i];}
+  for(int i=0;i<32;i++) msg[2+i]=pubkey[i];
   for(uint i=0;i<prefix_len;i++)msg[34+i]=prefix[i];
   uint n=34+prefix_len;
   if(with_nonce){ulong nonce=start+(ulong)gid; for(int i=0;i<8;i++)msg[n+i]=(nonce>>(i*8))&255; n+=8;}
@@ -633,7 +667,7 @@ __kernel void vrf_batch(__global const u8 *pubkey, __global const u8 *scalar,
     valid=1; break;
   }
   if(!valid){for(int i=0;i<64;i++)outputs[gid*64+i]=0xff;return;}
-  scalarmult(gamma,h,sc);
+  scalarmult_shared_naf(gamma,h,shared_naf,shared_naf_top);
   point_double(gamma); point_double(gamma); point_double(gamma); // proof_to_hash cofactor
   pack(encoded,gamma);
   beta_msg[0]=3; beta_msg[1]=3;

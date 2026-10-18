@@ -1,4 +1,4 @@
-PROXIMA GPU MINER — WINDOWS BETA 0.1.0
+PROXIMA GPU MINER — WINDOWS BETA 0.1.1
 
 Community software for the Proxima Take 1 network. This is a Windows beta,
 not an official Proxima or GPU-vendor release.
@@ -26,6 +26,25 @@ is used. The RX 9070 XT is the tested development card; other AMD and NVIDIA
 cards are experimental and must pass their own setup and correctness checks.
 Performance varies by GPU, driver, temperature, workload, and network work.
 Passing setup does not establish long-term stability or guarantee rewards.
+
+UPDATING FROM 0.1.0
+
+Stop mining in the old app before switching versions. Back up the encrypted
+wallet and save the recovery password separately. Extract the complete new ZIP
+into a separate application folder. Keep your existing personal data folder,
+or the same PROXIMA_MINER_DATA override, to retain your wallet and local totals.
+
+Click "GPU and wallet setup" again before mining. The optimized kernel changes
+its fingerprint, so the old GPU profile cannot be reused. Setup checks the new
+GPU calculations and recalibrates performance and average board power. It keeps
+an existing wallet. This recalibration is not automatic on application launch.
+Setup selects Maximum; reselect your preferred power mode before starting.
+
+The development RX 9070 XT measured 1.96M to 3.72M VRF attempts/s in a controlled
+20-second comparison using the same key. Average board power changed from
+295.52W to 266.56W. A separate 37-second live sample averaged 3.52M attempts/s
+at 261.45W. These short samples do not establish sustained results on other
+cards or drivers, and higher attempt rates do not guarantee rewards.
 
 WALLET AND RECOVERY
 

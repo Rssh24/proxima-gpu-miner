@@ -1457,7 +1457,7 @@ func main() {
 	if y < 0 {
 		y = 0
 	}
-	hwnd, _, _ = createWindow.Call(0, uintptr(unsafe.Pointer(u(className))), uintptr(unsafe.Pointer(u("Proxima GPU Miner - Windows Beta 0.1.0"))), style, uintptr(x), uintptr(y), uintptr(width), uintptr(height), 0, 0, instance, 0)
+	hwnd, _, _ = createWindow.Call(0, uintptr(unsafe.Pointer(u(className))), uintptr(unsafe.Pointer(u("Proxima GPU Miner - Windows Beta 0.1.1"))), style, uintptr(x), uintptr(y), uintptr(width), uintptr(height), 0, 0, instance, 0)
 	if hwnd == 0 {
 		return
 	}

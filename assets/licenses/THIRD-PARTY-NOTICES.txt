@@ -1,4 +1,4 @@
-THIRD-PARTY NOTICES — Proxima GPU Miner Windows beta 0.1.0
+THIRD-PARTY NOTICES — Proxima GPU Miner Windows beta 0.1.1
 
 This community miner contains Proxima, independent local integration code,
 the Go runtime, and the Python embedded runtime. It is not an official

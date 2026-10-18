@@ -1,6 +1,6 @@
 # Source map and provenance
 
-This source tree accompanies Proxima GPU Miner for Windows beta 0.1.0. It includes the custom application and miner sources, build/test tooling, release assets, and the pinned official Proxima source. It contains no recipient wallet, recovery credentials, personal mining logs, or calibrated device profile.
+This source tree accompanies Proxima GPU Miner for Windows beta 0.1.1. It includes the custom application and miner sources, build/test tooling, release assets, and the pinned official Proxima source. It contains no recipient wallet, recovery credentials, personal mining logs, or calibrated device profile.
 
 ## Layout
 
@@ -40,6 +40,12 @@ The source checkout itself is not the installed application. The build creates a
 | `assets/launch.json` | Public pinned network identity and node endpoints; contains no payout wallet |
 
 `miner/tweetnacl.c` preserves the original public-domain source for the curve and SHA-512 primitives adapted into the kernel. Tests, documentation, and build scripts are part of the custom source release as well.
+
+## Kernel changes in 0.1.1
+
+The custom OpenCL kernel uses a 10-limb field representation, a scalar NAF representation shared within each workgroup, and a compact SHA-512 message buffer. The SHA-512 implementation retains the second padding block when the supported 69-byte prefix produces a 113-byte nonce-bearing input. These are implementation changes to the custom seeker; the official client and VRF rules remain pinned to the source below.
+
+Device profiles include the kernel hash. Updating this kernel requires recipients to run **GPU and wallet setup** again for correctness checks and fresh performance/power calibration. Setup preserves an existing wallet, writes a new device profile, and selects Maximum; users should reselect their desired power mode. See [CHANGELOG.md](CHANGELOG.md) for the measured development-card comparison and its limitations.
 
 ## Official Proxima source
 

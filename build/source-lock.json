@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "windows-beta-0.1.0",
+  "version": "windows-beta-0.1.1",
   "go_version": "go1.26.6",
   "upstream": {
     "repository": "https://github.com/lunfardo314/proxima",
@@ -19,11 +19,11 @@
   },
   "release_sources": {
     "app/balance.go": "fd20eed7fae5a3478ed73228047404f25a8448f034fd4e0f9f593926ccab3598",
-    "app/main.go": "93e5babcf19b41cf53c752dc9764a987e3c58c27b353fc778fd77a64d9faab85",
+    "app/main.go": "769b2e561d37dc796e6c5af714d847a135673d54614a1d63f485b182b752292f",
     "miner/acceptance_totals.py": "bd866551918b0868ad67eeab13ce169e548fd6933d57584524b4291b6f4a1482",
     "miner/device_config.py": "35ffe6e362b3bf156cf75a6838cf5fba78af10eb1e8de901ceee187ddf5960b7",
     "miner/device_profile.py": "f1e8e862875b525e8c6aab13ef05ffa9b6b981736e12d8ae1b2bcd4c2a6937bb",
-    "miner/diagnostics.py": "2cefe70c24c35e2f9f8c2ac2f0ecfb61939d5c1cbcdb08fe44bafd669772317d",
+    "miner/diagnostics.py": "ae8bc0160fa773d13414db9962b1753698531ad81760a93ea6e778eab4fcb365",
     "miner/gpu_filter.py": "8c5592e9c5f2f245c9394e60454da21d9f842a80f58f33c9f47a7a03e700f18f",
     "miner/launcher.go": "6b9d30575c5bc59e3171c6a21e699992886790a437e711289905961e78db7ded",
     "miner/opencl_backend.py": "bd6c3801e3497f4bd66ea541e3f281dadff26499a7592a1987bf13f2dd283996",
@@ -39,7 +39,7 @@
     "miner/thermal_control.py": "c8949fa257ac73d0f978fb576713617c14a83ef3b503ab2c048283e897f64f77",
     "miner/tweetnacl.c": "02e65bc3013ff2168983365e55906bc783c4c7e0a60d8100f17bb303a17175c4",
     "miner/validate.py": "7ebe33a269e56f8d305a8eaf88918c63a1beebfc0d7b649c692e171e39b91fb1",
-    "miner/vrf.cl": "0e4fc85bae12e77a81f477a9df47ba14b74d986eff27e53bbdd6c7b1f925354c",
+    "miner/vrf.cl": "7a680657435b37b709da6bc3fccf37c65369e894acba648773c056d504228f87",
     "miner/wallet.py": "7470b19da34f0cb7e47251e1fd1029eb4cd754c060070a6a518cb179ff7170d0",
     "upstream/util/vrf/vrf_test.go": "d892ef6d450b7f4eebcdbbcf4763faf01cacef8342fda3c98b03f1af2959e2af"
   }
