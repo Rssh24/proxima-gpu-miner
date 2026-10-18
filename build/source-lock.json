@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "version": "windows-beta-0.1.0",
+  "go_version": "go1.26.6",
+  "upstream": {
+    "repository": "https://github.com/lunfardo314/proxima",
+    "commit": "60515d0074e63e467de6d63532c1236c1bec332a",
+    "commit_time_utc": "2026-10-18T14:04:58Z",
+    "tree": "a627d015093d163f7aeff4f6eb0a49e7785b4a87",
+    "go_mod_sha256": "41b734967a5efd76457a8d54a9507e5c138629262c4b18b75ed687e3da1a88e1",
+    "go_sum_sha256": "fcc9c4873b482c867682fddc398f765e081af34d0e5a2b99f599145ff82f450f"
+  },
+  "python_embed": {
+    "version": "3.13.7",
+    "architecture": "amd64",
+    "url": "https://www.python.org/ftp/python/3.13.7/python-3.13.7-embed-amd64.zip",
+    "sha256": "f6cca216a359be84797cabb54149ce5e062afb16cc7567eb7fc51cacb2d86b65",
+    "source_url": "https://www.python.org/ftp/python/3.13.7/Python-3.13.7.tar.xz"
+  },
+  "release_sources": {
+    "app/balance.go": "fd20eed7fae5a3478ed73228047404f25a8448f034fd4e0f9f593926ccab3598",
+    "app/main.go": "93e5babcf19b41cf53c752dc9764a987e3c58c27b353fc778fd77a64d9faab85",
+    "miner/acceptance_totals.py": "bd866551918b0868ad67eeab13ce169e548fd6933d57584524b4291b6f4a1482",
+    "miner/device_config.py": "35ffe6e362b3bf156cf75a6838cf5fba78af10eb1e8de901ceee187ddf5960b7",
+    "miner/device_profile.py": "f1e8e862875b525e8c6aab13ef05ffa9b6b981736e12d8ae1b2bcd4c2a6937bb",
+    "miner/diagnostics.py": "2cefe70c24c35e2f9f8c2ac2f0ecfb61939d5c1cbcdb08fe44bafd669772317d",
+    "miner/gpu_filter.py": "8c5592e9c5f2f245c9394e60454da21d9f842a80f58f33c9f47a7a03e700f18f",
+    "miner/launcher.go": "6b9d30575c5bc59e3171c6a21e699992886790a437e711289905961e78db7ded",
+    "miner/opencl_backend.py": "bd6c3801e3497f4bd66ea541e3f281dadff26499a7592a1987bf13f2dd283996",
+    "miner/oracle.go": "e278deb2e4038e575ffb6c814d4c6cb19fc1cf55abe1cdccfd475de08e49fd1c",
+    "miner/oracle.py": "ccbf3b798aa02e637487358aebc286935de50743f2c0ebfa1bca8128589b480e",
+    "miner/paths.py": "a2991b46704440709a873b8592fb989928eb1cba84c18915f74197f8ccdb1064",
+    "miner/power_control.py": "8dc3cba6129acda3ff7c485ae94fcd06259bcabdbe0f3e14ffb9462862434b6c",
+    "miner/run_mining.py": "7ce031ff5b5681add9ad08bcd8378b1f63031a6ffa06c92d9a047618205d0dec",
+    "miner/seeker.py": "1fbc151c4e62a238f0888a42073aaeca6da28062543b64a58562de7d89441bbe",
+    "miner/setup.py": "0a8ef41dd008456f819fbd92b24a816e50738b1c86f570756cc515b9be58b8ba",
+    "miner/status_io.py": "6a609e791080526f17ccf063697593c3ace0d21f90d1fe93aad398b8afe67fcb",
+    "miner/telemetry.py": "956faf57d94b668be7bbd7c05a60799fb73dad2da7d005f523ba5142d4fb77ec",
+    "miner/thermal_control.py": "c8949fa257ac73d0f978fb576713617c14a83ef3b503ab2c048283e897f64f77",
+    "miner/tweetnacl.c": "02e65bc3013ff2168983365e55906bc783c4c7e0a60d8100f17bb303a17175c4",
+    "miner/validate.py": "7ebe33a269e56f8d305a8eaf88918c63a1beebfc0d7b649c692e171e39b91fb1",
+    "miner/vrf.cl": "0e4fc85bae12e77a81f477a9df47ba14b74d986eff27e53bbdd6c7b1f925354c",
+    "miner/wallet.py": "7470b19da34f0cb7e47251e1fd1029eb4cd754c060070a6a518cb179ff7170d0",
+    "upstream/util/vrf/vrf_test.go": "d892ef6d450b7f4eebcdbbcf4763faf01cacef8342fda3c98b03f1af2959e2af"
+  }
+}

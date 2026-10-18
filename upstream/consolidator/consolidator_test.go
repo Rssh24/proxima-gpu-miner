@@ -1,0 +1,166 @@
+package consolidator
+
+import (
+	"testing"
+
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/stretchr/testify/require"
+)
+
+// The planning rules of kb/consolidate.md decide every transaction the
+// consolidator builds: when it acts, which outputs it consumes, and how their
+// total splits between what the wallet keeps and what moves out. The loop
+// itself needs a node; the rules are pure and pinned here.
+
+const (
+	prox      = 1_000_000       // one base token in motes, below which nothing moves
+	floor     = 9*prox + prox/4 // storage deposit of the kept sigLock output
+	minimum   = 100 * prox
+	threshold = 1000 * prox
+)
+
+// out is a consolidatable output stand-in carrying only an amount and an ID;
+// the planning rules never look at the lock.
+func out(amount uint64, idByte byte) *ledger.OutputWithID {
+	o := ledger.NewOutput(func(o *ledger.OutputBuilder) {
+		o.WithTokenBalance(amount)
+	})
+	id := base.OutputID{}
+	id[len(id)-1] = idByte
+	return &ledger.OutputWithID{ID: id, Output: o}
+}
+
+func amounts(outs []*ledger.OutputWithID) []uint64 {
+	ret := make([]uint64, len(outs))
+	for i, o := range outs {
+		ret[i] = o.Output.TokenBalance()
+	}
+	return ret
+}
+
+func planOf(outs []*ledger.OutputWithID, maxInputs, compactAt int) *plan {
+	return planConsolidation(outs, threshold, minimum, maxInputs, compactAt, prox, floor)
+}
+
+// At or under the threshold, and under the output-count threshold, there is
+// nothing to do, whatever the wallet holds.
+func TestPlanNothingBelowBothTriggers(t *testing.T) {
+	require.Nil(t, planOf([]*ledger.OutputWithID{out(900*prox, 1), out(100*prox, 2)}, 30, 10))
+}
+
+// A single output above the threshold is not scattered and is left alone,
+// so an already consolidated account costs nothing per tick.
+func TestPlanLeavesSingleOutputAlone(t *testing.T) {
+	require.Nil(t, planOf([]*ledger.OutputWithID{out(5000*prox, 1)}, 30, 10))
+}
+
+// Above the threshold everything above the minimum moves; the smallest
+// outputs are consumed first.
+func TestPlanMovesAboveMinimumSmallestFirst(t *testing.T) {
+	outs := []*ledger.OutputWithID{out(700*prox, 1), out(150*prox, 2), out(250*prox, 3)}
+	p := planOf(outs, 30, 10)
+	require.NotNil(t, p)
+	require.Equal(t, []uint64{150 * prox, 250 * prox, 700 * prox}, amounts(p.inputs))
+	require.EqualValues(t, 1100*prox, p.consumed)
+	require.EqualValues(t, 100*prox, p.kept)
+	require.EqualValues(t, 1000*prox, p.moved)
+}
+
+// The minimum is a property of the whole account: what the input cap leaves
+// unconsumed counts toward it, so the consumed set can move in full.
+func TestPlanUnconsumedCountsTowardMinimum(t *testing.T) {
+	outs := []*ledger.OutputWithID{out(1200*prox, 1), out(10*prox, 2), out(20*prox, 3)}
+	p := planOf(outs, 2, 10)
+	require.NotNil(t, p)
+	require.Equal(t, []uint64{10 * prox, 20 * prox}, amounts(p.inputs))
+	require.EqualValues(t, 0, p.kept)
+	require.EqualValues(t, 30*prox, p.moved)
+}
+
+// A pile of outputs is compacted even when the total is under the threshold,
+// and then nothing moves.
+func TestPlanCountTriggerOnlyCompacts(t *testing.T) {
+	outs := make([]*ledger.OutputWithID, 0, 10)
+	for i := byte(0); i < 10; i++ {
+		outs = append(outs, out(15*prox, i))
+	}
+	p := planOf(outs, 30, 10)
+	require.NotNil(t, p)
+	require.Len(t, p.inputs, 10)
+	require.EqualValues(t, 150*prox, p.kept)
+	require.EqualValues(t, 0, p.moved)
+}
+
+// A remainder under the storage floor cannot be an output of its own: it is
+// folded into what moves. A movable amount under one base token stays, and
+// dust that cannot yet form one output above the floor is left alone.
+func TestPlanFoldsTinyAmounts(t *testing.T) {
+	// the input cap leaves the largest output (95 PROX) unconsumed, so kept
+	// would be 100 - 95 = 5 PROX: under the floor, folded into moved
+	outs := []*ledger.OutputWithID{out(95*prox, 1), out(500*prox, 2), out(600*prox, 3)}
+	p := planOf(outs, 2, 1000)
+	require.NotNil(t, p)
+	require.EqualValues(t, 595*prox, p.consumed)
+	require.EqualValues(t, 0, p.kept)
+	require.EqualValues(t, p.consumed, p.moved)
+
+	// the cap consumes only two dust outputs while the rest covers the
+	// minimum, so moved would be 0.5 PROX: it stays, but 0.5 PROX cannot be
+	// an output either, so nothing is planned until more dust piles up
+	outs = []*ledger.OutputWithID{out(prox/4, 1), out(prox/4, 2), out(5000*prox, 3)}
+	require.Nil(t, planOf(outs, 2, 1000))
+
+	// under the threshold the count trigger compacts, and the consumed dust
+	// just clears the floor as one output
+	outs = []*ledger.OutputWithID{out(prox/2, 1), out(9*prox, 2), out(95*prox, 3)}
+	p = planOf(outs, 2, 2)
+	require.NotNil(t, p)
+	require.EqualValues(t, 9*prox+prox/2, p.consumed)
+	require.EqualValues(t, 0, p.moved)
+	require.EqualValues(t, p.consumed, p.kept)
+}
+
+func target(idByte byte, share uint16, balance uint64) txbuildercore.SequencerCandidate {
+	id := base.ChainID{}
+	id[len(id)-1] = idByte
+	return txbuildercore.SequencerCandidate{ID: id, ShareLeft: share, Balance: balance}
+}
+
+// A pinned target is used when it is active and leaves anything. A random
+// draw goes by the delegation rating over the candidates leaving anything:
+// here the shares tie, so the balance decides the order and the best is
+// drawn 3 times out of 6, the worst once. A sequencer leaving nothing is
+// never drawn. The delegation requires exactly what the drawn target leaves:
+// the wallet is a price taker.
+func TestSelectDelegationTarget(t *testing.T) {
+	active := []txbuildercore.SequencerCandidate{target(1, 600, 10), target(2, 0, 1000), target(3, 600, 100), target(4, 600, 1)}
+
+	// eligible are 1, 3, 4 (rating by balance: 3, 1, 4), tickets 3, 2, 1
+	for r, want := range map[int]byte{0: 3, 2: 3, 3: 1, 4: 1, 5: 4} {
+		got, err := SelectDelegationTarget(active, nil, func(n int) int {
+			require.Equal(t, 6, n)
+			return r
+		})
+		require.NoError(t, err)
+		require.Equal(t, want, got.ID[len(got.ID)-1], "draw %d", r)
+		require.Equal(t, uint16(600), got.ShareLeft, "the cut is what the target leaves")
+	}
+
+	_, err := SelectDelegationTarget([]txbuildercore.SequencerCandidate{target(2, 0, 1)}, nil, nil)
+	require.ErrorContains(t, err, "leaves delegators anything")
+	_, err = SelectDelegationTarget(nil, nil, nil)
+	require.ErrorContains(t, err, "no sequencer has been active")
+
+	pinned := active[0].ID
+	got, err := SelectDelegationTarget(active, &pinned, nil)
+	require.NoError(t, err)
+	require.Equal(t, active[0], got)
+	nothing := active[1].ID
+	_, err = SelectDelegationTarget(active, &nothing, nil)
+	require.ErrorContains(t, err, "leaves delegators nothing")
+	absent := target(9, 1000, 1).ID
+	_, err = SelectDelegationTarget(active, &absent, nil)
+	require.ErrorContains(t, err, "no settled milestone")
+}

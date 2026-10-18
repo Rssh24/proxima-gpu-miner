@@ -1,0 +1,150 @@
+
+func producedStemLockOfSelfTx : atPath(concat(pathToProducedOutputs, txStemOutputIndex, lockConstraintIndex))
+
+func _predOutputIDOnSuccessor : parseInlineDataArgument(producedStemLockOfSelfTx, 0)
+
+// vrfProofOnSuccessor is sig type byte + signature proper
+func vrfProofOnSuccessor : parseInlineDataArgument(producedStemLockOfSelfTx, 1)
+
+// Aggregates declared on the produced (successor) stem (stemLock args).
+func _totalSupplyOnSuccessor    : parseInlineDataArgument(producedStemLockOfSelfTx, 2)
+func _totalCoverageOnSuccessor  : parseInlineDataArgument(producedStemLockOfSelfTx, 3)
+func _slotInflationOnSuccessor  : parseInlineDataArgument(producedStemLockOfSelfTx, 4)
+
+// coverageDelta no longer lives on the stem. It is carried on the sequencer
+// constraint (arg 2) of this branch's own sequencer milestone output, and the
+// stem's total-coverage recurrence reads it from there. The branch tx is itself
+// a sequencer tx, so txSequencerOutputIndex is defined.
+func _coverageDeltaOfSeqOutput : parseInlineDataArgument(atPath(concat(pathToProducedOutputs, txSequencerOutputIndex, sequencerConstraintIndex)), 0, #sequencer)
+
+// $0 - stem predecessor index
+func _predVRFProof : parseInlineDataArgument( consumedConstraintByIndex($0, lockConstraintIndex), 1, #stemLock)
+
+// _kSlotsBack = txSlot - slotOf(this consumed stem). Evaluated only inside the
+// consumed branch of stemLock, where `self` IS the predecessor stem and
+// `inputIDByIndex(selfOutputIndex)` is the predecessor stem's outputID.
+func _kSlotsBack : sub(txSlot, first4Bytes(inputIDByIndex(selfOutputIndex)))
+
+// _isGenesisStemPredID($0): true iff the predecessor-output-id field is the
+// genesis marker (33 zero bytes). Genesis has no predecessor; every other
+// stem declares the real outputID of its predecessor in this slot.
+func _isGenesisStemPredID : equal($0, 0x000000000000000000000000000000000000000000000000000000000000000000)
+
+// _enforceGenesisStemValues($0..$4): the 5 stemLock args. If this stem is the
+// genesis stem, every constrained aggregate must equal what the library
+// prescribes for slot 0. This makes the genesis state provable for backwards
+// audit — a verifier walking the tangle to the first branch transaction reruns
+// stemLock at the moment that transaction consumes genesis, and rejects any
+// genesis whose seed values diverge from constInitialSupply / library zeros.
+// coverageDelta no longer lives on the stem (it moved to the sequencer
+// constraint); the genesis coverageDelta == initialSupply is anchored by genesis
+// construction and the totalCoverage == initialSupply pin here (for genesis there
+// is no predecessor halving, so totalCoverage == coverageDelta).
+// The unconstrained StemData tuple (frozenCoverage / numTransactions /
+// numSeqTransactions / numSeq / baselineRoot, at output index 3) is NOT pinned
+// here — it is consensus data interpreted only outside the ledger.
+//
+// For non-genesis stems this clause short-circuits to true.
+func _enforceGenesisStemValues : or(
+   not(_isGenesisStemPredID($0)),
+   and(
+      require(equal($1, 0x),                     !!!genesis_vrfProof_must_be_empty),
+      require(equalUint($2, constInitialSupply), !!!genesis_totalSupply_must_equal_initialSupply),
+      require(equalUint($3, constInitialSupply), !!!genesis_totalCoverage_must_equal_initialSupply),
+      require(equal($4, 0x),                     !!!genesis_slotInflation_must_be_zero)
+   )
+)
+
+// $0 - predecessor output id
+// $1 - VRF proof (signature data (sig type byte + signature proper) of message = <VRF proof from the stem predecessor> || <slot of the transaction>)
+// $2 - totalSupply (z64): Σ tokens on this branch's state
+// $3 - totalCoverage (z64): accumulated halving sum at this slot
+// $4 - slotInflation (z64): Σ inflation amounts in this branch's past cone
+// coverageDelta (sum of consumed amounts on this branch's past cone) is carried
+// on the sequencer constraint of this branch's milestone output, read via
+// _coverageDeltaOfSeqOutput.
+// The remaining deterministic aggregates (frozenCoverage, numTransactions,
+// numSeqTransactions, numSeq, baselineRoot) live in the unconstrained StemData
+// inline-data literal at output index 3.
+// does not require unlock parameters
+func stemLock: and(
+	require(isBranchTransaction, !!!must_be_a_branch_transaction),
+    require(equalUint(selfNumConstraints, 4), !!!stem_output_must_contain_exactly_4_UTXO_elements),
+	require(equal(selfBlockIndex, lockConstraintIndex), !!!locks_must_be_at_lockConstraintIndex),
+	require(isZero(selfTokenBalanceValue), !!!amount_must_be_zero),
+	mustSize($0, 33),
+	_enforceGenesisStemValues($0, $1, $2, $3, $4),
+    or(
+       and(
+          selfIsConsumedOutput,
+             // enforce correct predecessor output on the successor
+          require(
+             equal(inputIDByIndex(selfOutputIndex), _predOutputIDOnSuccessor),
+             !!!wrong_stem_predecessor_output_ID_on_successor
+          ),
+             // enforce correct VRF proof on successor. ECVRF (RFC 9381) over
+             // message = predecessor VRF proof || slot, under the tx signer's
+             // ED25519 key. Unlike a plain signature the proof is unique per
+             // (key, message), so the derived bonus cannot be ground.
+		  require(
+             vrfVerify(signaturePublicKey(txSignatureData), concat($1, txSlot), vrfProofOnSuccessor),
+             !!!VRF_proof_check_failed
+          ),
+            // ----- recurrences and trustless-stats sanity -----
+            // Evaluated here, in the consumed branch, because `self` IS the
+            // predecessor stem so $2/$3 read the predecessor's TotalSupply /
+            // TotalCoverage directly. The successor's aggregates come from
+            // `producedStemLockOfSelfTx` (the new stem on this same tx).
+            //
+            // Supply recurrence:  totalSupply == predTotalSupply + slotInflation
+          require(
+             equalUint(_totalSupplyOnSuccessor, add($2, _slotInflationOnSuccessor)),
+             !!!supply_inconsistent_with_predecessor
+          ),
+            // Total-coverage halving recurrence (the only formula in the system):
+            //   totalCoverage == (predTotalCoverage >> K) + coverageDelta
+            // K = slot diff from previous branch. rshift64 returns 0 for K >= 64,
+            // matching the off-chain "≤64-slot halving" convention.
+          require(
+             equalUint(_totalCoverageOnSuccessor, add(rshift64($3, _kSlotsBack), _coverageDeltaOfSeqOutput)),
+             !!!total_coverage_inconsistent_with_predecessor
+          )
+            // NOTE: branch healthiness (healthyCoverageDelta) is intentionally NOT
+            // enforced here. The branch tx, once issued, is immutable; enforcing a
+            // health threshold on the ledger can deadlock network restart from an old
+            // snapshot (e.g. after frozen coverage of small-balance sequencers expires
+            // in a future slot, no healthy branch can be reconstructed). Health stays a
+            // consensus signal only: LRB selection (multistate/roots.go) and the
+            // suppressible sequencer issue-gate. The coverage values themselves remain
+            // enforced (totalCoverage recurrence above).
+       ),
+       and(
+          selfIsProducedOutput,
+            // must be consistent with the transaction level data
+          equal(selfOutputIndex, txStemOutputIndex),
+            // enforce the sequencer coverage upper bound on the sequencer chain output
+          _enforceCoverageContributionUpperBound
+       )
+    )
+)
+
+// reads amounts constraint of the sequencer chain output
+func _seqChainAmounts : atPath(concat(pathToProducedOutputs, txSequencerOutputIndex, amountsConstraintIndex))
+
+// sequencer coverage = tokenBalance + frozenCoverage[epoch 0]
+func _seqChainCoverage : add(amountAt(_seqChainAmounts, 0), frozenCoverageAt(_seqChainAmounts, 0))
+
+// reads chain constraint of the sequencer output and extracts chain ID
+func _seqChainConstraint : atPath(concat(pathToProducedOutputs, txSequencerOutputIndex, chainConstraintIndex))
+func _seqChainID : parseInlineDataArgument(_seqChainConstraint, 0, #chain)
+
+// enforces that sequencer coverage does not exceed coverageContributionUpperBound, so no
+// single sequencer dominates. There is no lower bound: any sequencer may issue a branch.
+// Slot-dependent, changeable via ledger upgrade. The bootstrap chain is exempt.
+func _enforceCoverageContributionUpperBound : or(
+   equal(_seqChainID, constBootstrapChainID),
+   require(
+      not(lessThan(coverageContributionUpperBound(txSlot), _seqChainCoverage)),
+      !!!sequencer_coverage_above_maximum
+   )
+)

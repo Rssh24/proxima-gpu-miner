@@ -1,0 +1,84 @@
+{
+  "version": "windows-beta-0.1.0",
+  "source_commit": "60515d0074e63e467de6d63532c1236c1bec332a",
+  "miner_version": 4,
+  "artifacts": {
+    "proxi.exe": "4dbbdfe1b00ac42f62385bc86e1551a06127532770dfe3cf446d0b4d1b00c849",
+    "oracle.exe": "6f45f9b9ed44bfa9269d88b6d76d6f6c1aae0f50959b9e2e31ba6404c4386a85",
+    "gpu-seeker.exe": "567b036342c6c65b492755c6bf693f3e2cf8f75560e20ae565120a2c05f2257d"
+  },
+  "seeker_sources": {
+    "acceptance_totals.py": "bd866551918b0868ad67eeab13ce169e548fd6933d57584524b4291b6f4a1482",
+    "device_config.py": "35ffe6e362b3bf156cf75a6838cf5fba78af10eb1e8de901ceee187ddf5960b7",
+    "device_profile.py": "f1e8e862875b525e8c6aab13ef05ffa9b6b981736e12d8ae1b2bcd4c2a6937bb",
+    "diagnostics.py": "2cefe70c24c35e2f9f8c2ac2f0ecfb61939d5c1cbcdb08fe44bafd669772317d",
+    "gpu_filter.py": "8c5592e9c5f2f245c9394e60454da21d9f842a80f58f33c9f47a7a03e700f18f",
+    "opencl_backend.py": "bd6c3801e3497f4bd66ea541e3f281dadff26499a7592a1987bf13f2dd283996",
+    "oracle.py": "ccbf3b798aa02e637487358aebc286935de50743f2c0ebfa1bca8128589b480e",
+    "paths.py": "a2991b46704440709a873b8592fb989928eb1cba84c18915f74197f8ccdb1064",
+    "power_control.py": "8dc3cba6129acda3ff7c485ae94fcd06259bcabdbe0f3e14ffb9462862434b6c",
+    "run_mining.py": "7ce031ff5b5681add9ad08bcd8378b1f63031a6ffa06c92d9a047618205d0dec",
+    "seeker.py": "1fbc151c4e62a238f0888a42073aaeca6da28062543b64a58562de7d89441bbe",
+    "setup.py": "0a8ef41dd008456f819fbd92b24a816e50738b1c86f570756cc515b9be58b8ba",
+    "status_io.py": "6a609e791080526f17ccf063697593c3ace0d21f90d1fe93aad398b8afe67fcb",
+    "telemetry.py": "956faf57d94b668be7bbd7c05a60799fb73dad2da7d005f523ba5142d4fb77ec",
+    "thermal_control.py": "c8949fa257ac73d0f978fb576713617c14a83ef3b503ab2c048283e897f64f77",
+    "validate.py": "7ebe33a269e56f8d305a8eaf88918c63a1beebfc0d7b649c692e171e39b91fb1",
+    "vrf.cl": "0e4fc85bae12e77a81f477a9df47ba14b74d986eff27e53bbdd6c7b1f925354c",
+    "wallet.py": "7470b19da34f0cb7e47251e1fd1029eb4cd754c060070a6a518cb179ff7170d0"
+  },
+  "gpu_revision": "portable-opencl-beta-0.1.0",
+  "thermal_revision": "portable-thermal-beta-0.1.0",
+  "status_io_revision": "status-io-20261019-1",
+  "validation_passed": true,
+  "validation_scope": "RX 9070 XT hardware; other AMD/NVIDIA devices require first-run self-test and owner testing.",
+  "evidence": {
+    "official_gpu_proofs": {
+      "passed": true,
+      "official_proof_checks": 109,
+      "rfc_vectors": 3,
+      "nonce_carry_and_wrap": true
+    },
+    "first-run-setup": true,
+    "wallet-idempotence": true,
+    "official-protocol": true,
+    "network-compatibility": true,
+    "diagnostics-export": true,
+    "calibration": {
+      "device_name": "AMD Radeon RX 9070 XT",
+      "batch": 131072,
+      "local": 32,
+      "attempts_per_second": 1966791.0256872352,
+      "power_profiles": {
+        "reference_board_power_w": 315.95021518833187,
+        "idle_board_power_w": 40.715569281935,
+        "balanced": {
+          "target_w": 157.97510759416593,
+          "initial_rate": 754129.2855131355,
+          "batch": 16384,
+          "local": 32
+        },
+        "eco": {
+          "target_w": 78.98755379708297,
+          "initial_rate": 246137.96671044736,
+          "batch": 16384,
+          "local": 32
+        }
+      },
+      "self_test": {
+        "passed": true,
+        "official_proof_checks": 112,
+        "rfc_vectors": 3,
+        "nonce_carry_and_wrap": true
+      }
+    },
+    "cumulative_history_unit_tests": 22,
+    "cumulative_protocol_persisted_solutions": 4,
+    "auto_gpu_selection_tests": 20,
+    "device_binding_tests": 32,
+    "device_profile_tests": 31,
+    "gui_and_balance_tests": 22,
+    "diagnostics_privacy_tests": 4,
+    "auto_gpu_actual_inventory": "RX 9070 XT preferred over the integrated GPU"
+  }
+}

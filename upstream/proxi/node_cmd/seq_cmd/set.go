@@ -1,0 +1,242 @@
+package seq_cmd
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/lunfardo314/proxima/proxi/glb"
+	"github.com/lunfardo314/proxima/sequencer/seqdata"
+	"github.com/lunfardo314/proxima/sequencer/txbuilder_seq"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/lunfardo314/proxima/util/smallkv"
+	"github.com/spf13/cobra"
+)
+
+func initSeqSetCmd() *cobra.Command {
+	setCmd := &cobra.Command{
+		Use:   "set-params",
+		Short: `update sequencer parameters (name, fee, sequencer cut, greedy, pace, enforce_freeze_bounds, min_topup), or replace them wholesale with --json`,
+		Args:  cobra.NoArgs,
+		Run:   runSeqSetCmd,
+	}
+
+	glb.AddFlagTarget(setCmd)
+
+	setCmd.Flags().String("name", "", "sequencer name")
+	setCmd.Flags().Uint64("fee", 0, "minimum tag-along fee")
+	setCmd.Flags().Uint16("margin", 0, "sequencer (inflation) cut in promille (0-1000)")
+	setCmd.Flags().Uint16("profit_cut", 0, "synonym of --margin")
+	setCmd.Flags().Bool("greedy", false, "greedy flag")
+	setCmd.Flags().Uint8("pace", 0, "pace value (ticks)")
+	setCmd.Flags().Bool("enforce_freeze_bounds", false, "enforce the coverage contribution upper bound when freezing delegations")
+	setCmd.Flags().Uint64("min_topup", 0, "minimum top-up request accepted, in motes; the sequencer applies a floor of 90 PROX whatever is set")
+	setCmd.Flags().String("json", "", "replace the whole sequencer data with this JSON object; cannot be combined with the per-field flags")
+
+	setCmd.InitDefaultHelpCmd()
+	return setCmd
+}
+
+func runSeqSetCmd(cmd *cobra.Command, _ []string) {
+	walletData := glb.GetWalletData()
+
+	seqID := sequencerInQuestion()
+	glb.Infof("sequencer id: %s", seqID.String())
+
+	// Fetch current sequencer data.
+	clnt := glb.GetClient()
+	seqOut, _, err := clnt.GetChainOutput(seqID)
+	glb.AssertNoError(err)
+
+	// The sequencer rejects a set-params request from anyone but its
+	// controller, so refuse to pay the fee for one that cannot take effect.
+	lib := glb.GetTxLibrary()
+	walletHolderID := base.HolderIDFromED25519PrivateKey(walletData.PrivateKey)
+	glb.Assertf(isControlledBy(lib, seqOut, walletHolderID),
+		"sequencer %s is not controlled by this wallet (%s)", seqID.String(), ledger.SigLock(walletHolderID).String())
+
+	currentSD, err := ledger.ParseSequencerData(seqOut.Output)
+	if err != nil {
+		currentSD = seqdata.SequencerData{}
+	}
+
+	// Apply only explicitly changed flags.
+	newSD := currentSD.Clone()
+	changed := false
+
+	// --json replaces the whole object, including any keys this build does not
+	// recognise. It is the escape hatch for setting fields the per-field flags
+	// do not cover, so combining it with them would be ambiguous.
+	if cmd.Flags().Changed("json") {
+		for _, f := range []string{"name", "fee", "margin", "profit_cut", "greedy", "pace", "enforce_freeze_bounds", "min_topup"} {
+			glb.Assertf(!cmd.Flags().Changed(f), "--json cannot be combined with --%s", f)
+		}
+		raw, _ := cmd.Flags().GetString("json")
+		parsed, err := seqdata.FromBytes([]byte(raw))
+		glb.AssertNoError(err)
+		newSD = &parsed
+		changed = true
+	}
+
+	if cmd.Flags().Changed("name") {
+		v, _ := cmd.Flags().GetString("name")
+		glb.Assertf(len(v) <= 6, "name must be empty (reset to default) or 1 to 6 characters")
+		newSD.SetName(v)
+		changed = true
+	}
+	if cmd.Flags().Changed("fee") {
+		v, _ := cmd.Flags().GetUint64("fee")
+		newSD.SetMinimumFee(v)
+		changed = true
+	}
+	// --margin and --profit_cut are the same sequencer (inflation) cut. Giving
+	// both is only accepted when they agree, so a typo cannot silently pick one.
+	if marginFlag, ok := changedCutFlag(cmd); ok {
+		glb.Assertf(marginFlag <= 1000, "sequencer cut must be 0-1000 promille")
+		newSD.SetSeqProfitMarginPromille(marginFlag)
+		changed = true
+	}
+	if cmd.Flags().Changed("greedy") {
+		v, _ := cmd.Flags().GetBool("greedy")
+		newSD.SetGreedy(v)
+		changed = true
+	}
+	if cmd.Flags().Changed("pace") {
+		v, _ := cmd.Flags().GetUint8("pace")
+		newSD.SetPace(v)
+		changed = true
+	}
+	if cmd.Flags().Changed("enforce_freeze_bounds") {
+		v, _ := cmd.Flags().GetBool("enforce_freeze_bounds")
+		newSD.SetEnforceFreezeBounds(v)
+		changed = true
+	}
+	if cmd.Flags().Changed("min_topup") {
+		v, _ := cmd.Flags().GetUint64("min_topup")
+		newSD.SetMinimumTopUp(v)
+		changed = true
+	}
+
+	if !changed {
+		glb.Infof("no flags specified, nothing to change")
+		glb.Infof("current sequencer data:\n%s", currentSD.Lines("  ").String())
+		return
+	}
+
+	glb.Infof("current:\n%s", currentSD.Lines("  ").String())
+	glb.Infof("new:\n%s", newSD.Lines("  ").String())
+
+	// Get the minimum tag-along fee from the sequencer.
+	fee, err := glb.GetRequiredTagAlongFee(seqID)
+	if err != nil {
+		glb.Infof("error getting tag-along fee: %s", err)
+		return
+	}
+	// The request must also satisfy the minimum it asks the sequencer to
+	// declare: the backlog re-checks enrolled outputs against the fee of the
+	// latest own milestone, and the milestone that consumes this request is
+	// the first one to declare the new fee. Paying less would drop the request
+	// from the backlog before an orphaned milestone could be retried.
+	fee = max(fee, newSD.MinimumFee())
+	glb.Verbosef("tag-along fee: %s", util.Th(fee))
+
+	ts := glb.GetLedgerTimeNow()
+	if ts.IsSlotBoundary() {
+		ts = ts.AddTicks(12)
+	}
+
+	// Pull wallet inputs (all sigLock-controlled outputs).
+	walletOutputs, _, amountInWallet, err := clnt.GetTransferableOutputs(walletData.Account, 255)
+	glb.AssertNoError(err)
+	glb.Assertf(len(walletOutputs) > 0, "wallet has no outputs to create transaction")
+	glb.Assertf(amountInWallet >= fee, "not enough balance: have %d, need %d", amountInWallet, fee)
+
+	txb := txbuildercore.New(0)
+	consumedBytes := make([][]byte, 0, len(walletOutputs))
+	for i, in := range walletOutputs {
+		b := in.Output.Bytes()
+		txb.ConsumeOutput(b, in.ID)
+		consumedBytes = append(consumedBytes, b)
+		if i == 0 {
+			txb.PutSignatureUnlock(0)
+		} else {
+			err := txb.PutUnlockReference(byte(i), ledger.ConstraintIndexLock, 0)
+			glb.AssertNoError(err)
+		}
+	}
+
+	// Compose the set-seq-data sequencer-request output.
+	params := smallkv.New()
+	params.Set(txbuilder_seq.FieldSetSequencerDataBinary, newSD.Bytes())
+	reqOut, err := lib.NewSequencerRequestOutput(
+		fee,
+		seqID,
+		walletHolderID,
+		txbuilder_seq.RequestCodeSetSequencerData,
+		&params,
+	)
+	glb.AssertNoError(err)
+	txb.ProduceOutput(reqOut.Bytes())
+
+	// Remainder back to wallet.
+	if amountInWallet > fee {
+		remainderOut, err := txbuildercore.NewSigLockOutput(lib, amountInWallet-fee, walletHolderID)
+		glb.AssertNoError(err)
+		txb.ProduceOutput(remainderOut.Bytes())
+	}
+
+	prompt := fmt.Sprintf("\nupdate sequencer %s parameters?", seqID.String())
+	if !glb.YesNoPrompt(prompt, true) {
+		glb.Infof("exit")
+		os.Exit(0)
+	}
+
+	// Stamp + sign AFTER the prompt so the timestamp reflects the moment of
+	// submission rather than the moment we offered the prompt; otherwise a
+	// slow confirmation makes the tx "born stale".
+	ts = glb.GetLedgerTimeNow()
+	if ts.IsSlotBoundary() {
+		ts = ts.AddTicks(12)
+	}
+	for _, in := range walletOutputs {
+		ts = base.MaximumTime(ts, in.Timestamp())
+	}
+	txb.SetTimestamp(ts)
+	txb.ComputeInputCommitment()
+	txb.SignED25519(walletData.PrivateKey)
+
+	txBytes := txb.Bytes()
+	txid, err := txbuildercore.TxIDFromBytes(txBytes)
+	glb.AssertNoError(err)
+
+	glb.Infof("submitting the transaction...")
+
+	if err := glb.SubmitAndDisplay(txBytes, consumedBytes...); err != nil {
+		os.Exit(1)
+	}
+
+	if glb.NoWait() {
+		return
+	}
+	glb.TrackTxInclusion(txid, time.Second)
+}
+
+// changedCutFlag reads the sequencer (inflation) cut from whichever of the
+// synonymous --margin / --profit_cut flags was given.
+func changedCutFlag(cmd *cobra.Command) (uint16, bool) {
+	margin, _ := cmd.Flags().GetUint16("margin")
+	profitCut, _ := cmd.Flags().GetUint16("profit_cut")
+	switch {
+	case cmd.Flags().Changed("margin") && cmd.Flags().Changed("profit_cut"):
+		glb.Assertf(margin == profitCut, "--margin and --profit_cut are synonyms and must agree")
+		return margin, true
+	case cmd.Flags().Changed("margin"):
+		return margin, true
+	case cmd.Flags().Changed("profit_cut"):
+		return profitCut, true
+	}
+	return 0, false
+}

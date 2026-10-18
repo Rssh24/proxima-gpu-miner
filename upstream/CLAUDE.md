@@ -1,0 +1,474 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Proxima is a DAG-based cooperative distributed ledger written in Go (~80K lines,
+plus ~42K of tests). UTXO transactions are the vertices of a DAG called the
+**tangle** — no blocks, no mempool. Consensus comes from the **biggest ledger
+coverage rule**: like Bitcoin's longest chain, but measured in token coverage of
+the ledger state rather than proof of work. Token holders converge on it by
+cooperating, which is also the most profitable thing each can do — hence
+_cooperative consensus_.
+
+**[`ARCHITECTURE.md`](ARCHITECTURE.md) is the system reference** and carries the
+complete index of every document in and around the repository. Start there for
+anything structural; this file is working rules.
+
+Ecosystem dependencies:
+- `github.com/lunfardo314/easyfl` — EasyFL scripting language for UTXO constraints (covenants)
+- `github.com/lunfardo314/unitrie` — trie and Merkle structures for the multi-ledger state
+- `github.com/lunfardo314/lunfardo314.github.io` — the public documentation site
+
+## Knowledge base
+Main reference point is `CLAUDE.md`.
+
+Directory `kb` holds design notes, plans, findings and session reports.
+Claude should use it as a persistent and incrementally-improved knowledge base
+about the Project, and should maintain its index here in CLAUDE.md.
+
+**IMPORTANT — read before touching the core.** Two documents are **hard
+constraints**, not notes:
+
+- [`kb/dag_semantics.md`](kb/dag_semantics.md) — the authoritative
+  semantic model of the transaction DAG (the tangle) and the memDAG. Binds any
+  change to `core/memdag`, `core/attacher`, `core/vertex`, and the attachment /
+  coverage / pruning logic.
+- [`kb/sync_semantics.md`](kb/sync_semantics.md) — the authoritative
+  model of how a node catches up with the network. Binds
+  `core/core_modules/forward_sync`, `core/attacher`, `core/workflow`,
+  `sequencer`, `node`.
+
+Keep core changes consistent with both; each is evolved only with explicit user
+approval.
+
+### Developer documentation
+
+**`ARCHITECTURE.md`** (repo root) is the developer front door and holds the
+**complete index of every document** in and around the repository, each with a
+line on when to read it. It is not duplicated here: keep the index there, and
+this file for working rules.
+
+**A developer document lives in the package it documents.** There is no `docs/`
+directory. Two span packages rather than sitting in one, and are the ones worth
+knowing about before you touch anything:
+
+- `core/resilience.md` — spam and DDoS protection, survivability and recovery,
+  plus every gate on the transaction path. Read before changing anything that
+  rejects, drops, defers or rate-limits a transaction, and when a node is
+  shedding load.
+- `ledger/limits.md` — size and count ceilings, and which of the four layers
+  enforces each.
+
+The user-facing operational guides (`run_standalone`, `run_access`,
+`run_sequencer`, `node_config`, `wallet_config`, `proxi`, `delegate`,
+`testnet`) live on the public docs site under `participate/`
+(`github.com/lunfardo314/lunfardo314.github.io`,
+`https://lunfardo314.github.io/#/participate/...`); repo links point at those
+URLs.
+
+The documentation effort and the reorganization are both finished and archived
+(`kb/archive/shipped/docs.md`, `kb/archive/shipped/kb_reorg.md`) — read either
+for how things reached their present shape, neither as a plan.
+
+### `kb/` index
+
+Every document opens with a status blockquote — `HARD CONSTRAINT`, `LIVE`,
+`RESEARCH`, `SHIPPED` or `RESOLVED`. Trust that line over the
+document's own prose: during the 2026-08-24 reorganization, fourteen documents
+were found describing themselves wrongly, usually calling a shipped feature
+unimplemented.
+
+**The working set.** Sixteen documents: the two hard constraints, eight live
+specs, two specs not yet implemented (sequencer succession, forced delegation), the library proof and the witness endpoints, and two take 1 documents, the todo of
+breaking changes and the top-up spec. The take 1 branch `develop-take1` was folded into `develop` on 2026-10-08 (`v0.11.0-testnet`) and deleted; everything it carried is on `develop`. Nothing is queued on `develop`, and there
+is no longer a meta tracker — the documentation effort closed on 2026-09-03.
+Audited against `develop` and a running node the same day.
+
+| Doc | Status | Topic |
+|-----|--------|-------|
+| `dag_semantics.md` | constraint | Semantic model of the tangle and the memDAG. Read before touching the core. |
+| `sync_semantics.md` | constraint | Semantic model of how a node catches up. Read before touching sync. |
+| `inflation.md` | live | The two components of inflation: the arithmetic, closed forms, overflow analysis and the `proxi util inflation_emulation` tool. The user-facing half is on the docs site. **Two of its claims reached the site wrong before being caught** — verify against `ledger/def/{inflation,chain}.easyfl` before quoting it. |
+| `compact.md` | live | Spec for the enhanced `proxi node compact`: scan by category, category-selective and parallel multi-round compaction, auto mode. **The scan is built** — `proxi node compact scan`, any account, counting BOTH what is indexed under it and the publicly-abandoned dust anyone may claim; everything that builds transactions is a NOT-IMPLEMENTED stub. Read before issuing several transactions from one wallet: the per-sender pace gate drops timestamps closer than `TransactionPace` **silently**, since API submit is async. |
+| `consolidate.md` | live | **Built 2026-09-15, delegation mode redesigned and verified 2026-09-19** (`31fb6003`; on loc0 and on a local standalone node: create, askstop-and-top-up, fold, stale re-delegation): `proxi node consolidate`, a permanent wallet process that sweeps the account's sigLock outputs and reclaimable tag-alongs and moves what is above a configured minimum to a sequencer (`send_to_sequencer`), into a delegation (`autodelegate`) or into one output. Delegation is a market mode: the wallet is a price taker (requires exactly the cut its target leaves; `delegate.minimum_cut` not read), a `random` target is drawn by the rating of `sequencer_rating.md`, the set is driven by `target_delegations` (5) and `target_delegation_prox` (10,000), and every tick opens by tidying the spendable delegations: fold above the count, re-delegate one whose target is inactive, refuses it as loss-making, is not the pinned one, or left it unfrozen for an epoch. `max_delegations` is read as the older name. Since 2026-10-10 the engine is the repo-level package `consolidator` (config and output writer in the start call), `proxi node consolidate` a thin command over it. Since 2026-10-11 `proxi node mine` no longer embeds it: the mine covenant prices the reward's layout (`mine_payout_options.md`) and the miner places each reward by this document's rules, sharing `SelectDelegationTarget`; for a miner the consolidator is optional, tidying only (the docs site says so since 2026-10-17). Read before touching either, and for the trigger and split rules (balance over `threshold_prox` on at least two outputs, or `compact_at` outputs; unconsumed outputs count toward the minimum; remainders under the storage floor folded). |
+| `mine_vrf_pow.md` | live | **Built** (`6d217554`, hardfork, network reset 2026-09-08): the mine chain's proof of work is the trailing-zero count of an ECVRF output under the miner's key over predecessor ID, slot and nonce, with the 80-byte proof and the nonce in the mine input's lock unlock parameters. It replaced the signed-transaction hash, whose free signature nonce let an attempt cost a point addition instead of a scalar multiplication. Read for why the K bits must be on the VRF output and not on any hash containing a signature or a proof, and for the review of the in-house `util/vrf`, which the branch inflation bonus depends on too. Does not and cannot fix the GPU advantage. Moves to the archive once the fresh network has confirmed transits. |
+| `sequencer_rating.md` | live | **Built 2026-09-20**: how `proxi` picks a `random` delegation or tag-along target. Weighted rank sum over criteria, the price criterion weighing as much as the rest together (delegation: share left desc x4, balance desc, frozen-to-balance ratio asc, transit count desc, transit rate desc; tag-along: minimum fee asc x3, balance desc, transit count desc, transit rate desc; since 2026-10-17 the transit count and origin slot are read off the chain constraint, the rate T/L capped at the candidates' median, which tracks network load, so it ranks gaps in a chain's life, not milestone frequency), the list sorted by rating and drawn with weight linear in position; active = sequencer output in the LRB state at most 5 slots old and not produced by a bootstrap transaction (such a sender is stuck or mis-clocked); no price floor, only `proxi node delegate` drops targets leaving less than its `--cut`. Pure functions in `ledger/txbuildercore/seq_rating.go`, one fetch in `proxi/glb/sequencers.go`, used by consolidate, delegate and the `random` tag-along target; `proxi node seq_rating [--tag_along]` prints the table. The miner's own picker stays until its treasury loop is retired. Read before touching any target selection. |
+| `take1_todo.md` | take 1 todo | The list of breaking changes that ship with the next network reset, each linked to its spec where one exists: ensure constraints on requests step aside at `constTagAlongSlots` (done), the top-up request (done), pace 1 with the take 1 emission schedule and the fixed 1 PROX mine fee (done), and the node, miner and wallet work that can land before the reset. Operational items stay outside the repository. Read first when working on take 1. |
+| `delegation_topup.md` | take 1 spec | **Built for take 1 2026-09-22 (hardfork), miner's treasury loop retired the same day.** One tag-along to the target adds tokens to a delegation in any state the target can act on, and a frozen delegation stays frozen at the share pinned when the freeze began. No fee: the request balance is the amount, the sequencer is paid in frozen coverage and enforces a minimum top-up (`MinTopUp` in its data, floor 90 PROX since 2026-10-11, under the 95 PROX mine reward). New `ensureTopUpDelegation` guarantees delivery; the delegate lock's target path, with a third unlock byte naming the request, enforces the exact balance including the advance on the newly frozen amount. Sequencer request code 4; consolidator placement without askstop; miner treasury loop retired. Carries the reclaim fix: both ensure constraints step aside at `constTagAlongSlots` so the sender can reclaim a request in its exclusive window, and the wallet classifier recognises request outputs. Read before touching delegation transitions, sequencer requests or the consolidator's placement. |
+| `mine_conflict_rule.md` | live | Two parts. **Part A, built `5aac046b`**, policy only: among competing mine transits on one predecessor the canonical winner is the older successor slot, then the smaller VRF output, then the txid; the miner tree (`proxi/node_cmd/mine/mine_tree.go`) and the sequencer (`sequencer/task/mine_transits.go`, which holds a transit until the settlement window at the end of its slot) apply the same order, so inclusion order no longer decides. **Part B, built for take 1 2026-09-23**: pace 1 with an asymmetric retarget on a full-slot counter carried on the mine output, cap 56, the take 1 schedule (95 PROX, 60 days, then linear) and a fixed 1 PROX transit fee; the miner grinds a contested slot for a smaller VRF output until the settlement tick. Neither changes expected shares: a contest goes to a draw nobody can choose, and the share of contests won is the share of hashrate. Read before touching the miner's tie-break or the sequencer's tag-along ordering. |
+| `external_nonce_seeker.md` | live | **Built 2026-10-07**: the HTTP job protocol by which `proxi node mine` hands its nonce search to external seekers (profile keys `mine.seeker.listen` / `mine.seeker.token`; `--workers 0` leaves the whole search to them); every returned nonce is verified and proved by the miner itself, so a seeker holds the key but never builds a proof. It is the recommended way to mine faster: keep `proxi node mine`, which costs next to nothing beyond the search and is what places every reward in consensus, and replace only the seeker; the docs site recommends exactly that. The Rust reference seeker is `proxi/node_cmd/mine/nonce_seeker/`, built on the Rust twins `util/vrf/rust` and `util/keystore/rust`, which the Go tests `TestRustEquivalence` of those packages keep byte-equivalent to the Go code (built with cargo, skipped without it). Read before touching the miner's search loop or writing a seeker. |
+| `control_succession.md` | spec, not built | Safe sequencer succession: a two-stage grant/claim handshake that moves control of a sequencer chain to a new holder ID without risking a bricked chain. The controller grants a successor in the on-chain seq-data, the successor claims from a wallet holding its key, and the handoff milestone flips the chain output's sigLock. No ledger change, no hardfork: the work is sequencer request codes 5 and 6, a predecessor lock gate in the milestone builder, an LRB-based give-up in the sequencer loop, a waiting mode for the successor node and `proxi node seq grant|claim`. **Reviewed against `develop` 2026-09-23, nothing implemented.** Read before touching sequencer request handling, the start-up controller check or the sequencer loop's stop conditions. |
+| `library_proof.md` | live | **Built 2026-10-08. Wallet-side proof that the library it compiles with is the one the ledger commits to.** `get_ledger_definition` returns, with the library JSON, a `commitment`: the latest reliable branch's ID and bytes, the upgrade UTXO bytes and a Merkle proof against the baseline root carried in the branch's stem; `txbuildercore.VerifyLibraryCommitment` walks branch ID, bytes, root, proof, UTXO, hash, library, never reading the JSON's own hash field. One branch proves every upgrade. No bypass flag. Read before touching library loading in `api/client`, `proxi/glb` or the wasm wallet, or the upgrade UTXO. |
+| `mine_payout_options.md` | live | **Built 2026-10-11 (hardfork, ships with the next reset).** The mine covenant prices what a reward lands as: `mineLock(R, B, C, V, O)`, the fifth argument the payout option, selects one of three exact reward layouts, an opening sigLock of 15 PROX plus the fee to the signer, a new delegation of 50 PROX plus the fee with the signer as master, or one tag-along of A (95) from the signer with any request, and the transit mints what the option takes, so an idle token costs about 6.3 times one in consensus (amounts 15 and 50 since 2026-10-15, were 20 and 80). The ingate exempts only the opening from the unknown-sender rule. `proxi node mine` picks the option per round by profit from the `consolidate` section (own sequencer, top-up below target size, new delegation under the count, top-up, new, opening while unknown) and no longer embeds the consolidator. A stays 95: the schedule test pins it. Top-up floor 90 PROX. Not a replacement for `forced_delegation.md`, the simpler one to build first. Read before touching the mine lock, the miner's reward or the ingate's mining exemption. |
+| `forced_delegation.md` | spec, not built | Compulsory delegation of dormant capital, a hardfork for a later reset: a second arm of `sigLock` and `delegateLock` lets any sequencer wrap an output untouched for `constDormantSlots` into an ordinary frozen delegation to itself with the holder as master, byte-equal amount, cut at least a floor, each sequencer at its own hash-derived turn; a delegation left unfrozen is taken over the same way. Bounds dead capital of any origin to a leak with a known rate. Replaces the 2026-05 research draft (now `archive/superseded/forced_delegation_v1.md`, which put the rule in a Go bypass). Dust is the open question. Read before touching `sigLock`, `delegateLock` or the delegation pool. |
+| `api_witnesses.md` | live | **Built 2026-10-08.** The one trust input the library proof leaves, the branch ID, checked against other nodes: optional `api.node_urls` in the wallet profile (default empty, the generated profile lists the three public nodes), consulted for nothing but the branch ID. Every reachable witness must have committed the branch and, when its reliable branch is at or past that slot, have it on its reliable lineage. Empty list warns and continues. Residual: an attacker on every path the user has, which only TLS closes. Read before touching `glb.NodeAPIURL` or the wallet template's API section. |
+
+**`kb/research/`.** Seven documents that were investigated and **not
+built** — `tick_duration.md`, `branch_fork_convergence.md`, `credit_tokens.md`,
+`state_scan_paging.md`, `delegation_scalability.md` (the
+one partial exception: its freeze grid shipped, its load model is unmeasured), `scaling_1000tps.md`, and
+`covenant_sketches.md` (2026-10-17: a precise meaning for "covenant" built around ledger
+invariants — L1 covenants as constraints on L2 entities, tag-along as authenticated
+asynchronous messaging, keyless assets such as the mine chain, composition rules, a
+specification language; read before designing a new lock or covenant). Kept separate because a design
+note sitting beside live documents gets read as a description of how things
+work. In that directory the
+assumption is inverted: if it is there, the code does not do it. Index and the
+reason each is unbuilt: [`kb/research/README.md`](kb/research/README.md).
+
+**Nothing is queued.** The `QUEUED → <destination>` convention is retired: the
+reorganization finished on 2026-08-25 and every document that was waiting to be
+rewritten onto the docs site has been. If you meet a `QUEUED` header, it is a
+leftover — treat the document by its content, not its header.
+
+**`kb/archive/`.** Ninety-seven documents that no longer describe current
+work, in three buckets, each with a `README.md` indexing every file in it:
+
+| Bucket | What it holds | Read it for |
+|--------|---------------|-------------|
+| `archive/incidents/` | One event, one date, resolved. | Whether a recurring symptom has been seen before. Its index also lists three issues recorded and never closed. |
+| `archive/shipped/` | Specs for features now on `develop`. **The code is the truth.** | Why an alternative was rejected — the one thing code cannot record. |
+| `archive/superseded/` | Overtaken, shelved, or never taken up. **Nothing here is a plan.** | Why an approach was *not* taken. |
+
+## The system
+
+**Described in [`ARCHITECTURE.md`](ARCHITECTURE.md), not here.** The package
+map, the transaction and UTXO model (including the single-signature rationale,
+the key data structures and the UTXO tuple layout), the transaction and node
+lifecycles, the three databases, where the ledger rules live and what makes a
+change a hardfork, and the vocabulary — all of it is there, in one place. Read
+it before changing anything structural.
+
+What stays in this file is what ARCHITECTURE.md deliberately does not carry:
+working rules, the knowledge-base index, build and test commands, and the
+testnet and metrics reference below.
+
+## proxi CLI: wasm-style wallet architecture
+
+`proxi` is modeled as an **external wasm wallet**: it does NOT depend
+on the in-process `ledger.L()` singleton for tx construction or display.
+Everything it needs is fetched over the API and held in per-process
+wallet state.
+
+**Per-process wallet state** (in `proxi/glb/`):
+
+| Helper | What it gives you |
+|--------|-------------------|
+| `glb.GetLedgerConstants()` | `*txbuildercore.Constants` — slot/tick math, clock conversion, epoch limits, pace, etc. Fetched from `/api/v1/ledger_constants`. |
+| `glb.GetTxLibrary()` | `*txbuildercore.Library` — compile / parse-bytecode-one-level / decompile bytecode + the wallet helper methods (`ParseChainConstraint`, `ParseDelegationOutput`, `ParseFoundryBytecode`, `ParseTokenAmountBytecode`, `ParseDelegationParams`, `ParseSequencerConstraint`, `ClassifyChain`). Fetched via `client.GetLibrary` (walks the upgrade chain). `ClassifyChain(o, oid) ChainKind` is the singleton-free chain classifier (none/other/sequencer/foundry/delegation/mine) — classify by the output's own constraints, never by `oid.IsSequencerTransaction()` (a delegation transition rides inside its target sequencer's tx, setting the output ID's sequencer bit). Mirrors server-side `api/chain_explorer.makeRow`. |
+| `glb.SubmitAndDisplay(txBytes, consumedUTXOBytes…)` | Submits via `/api/v1/submit_tx`; on failure prints the failing tx pretty-form using the wallet library. |
+| `client.Eval` / `client.EvalU64` | Batched closed-formula evaluator for things the wallet can't compute locally (e.g. `chainInflationMultiStep`). |
+| `glb.NodeAPIURL()` | The URL of the node API this proxi talks to: wallet-profile key **`api.node_url`**, falling back to the legacy name `api.endpoint`. Never read either key directly — a command that does will miss the alias. The `--api.node_url` / `--api.endpoint` flags are bound per running command by `glb.BindNodeAPIFlags` in `PersistentPreRun`; binding them at registration time silently loses the flag, because several command trees register the same keys. |
+
+**Compose recipes** live in `ledger/txbuildercore/helpers_*.go`:
+`NewSigLockOutput`, `NewChainLockOutput`, `NewTagAlongOutput`,
+`NewChainOrigin`, `NewChainTransition`, `NewDelegateLockBytecode` +
+`NewDelegateLockState` + `NewDelegationParams`, `NewFoundryBytecode` +
+`TokenFoundry` + `TokenSentinel` + `NewTokenAmountBytecode` +
+`AppendTokenAmountToOutput`, `NewSequencerRequestOutput` +
+`NewEnsureStopDelegationConstraint`, `NewRedeemScriptConstraint`.
+Wallet-side parsers return `*View` value types (`ChainConstraintView`,
+`DelegationOutputView`, `DelegationParamsView`, `FoundryView`,
+`TokenAmountView`) — pure byte parses, no eval, no singleton.
+
+**Canonical templates** to copy when writing a new site:
+- write path: `proxi/node_cmd/{send,compact,mkchain,killchain,fund}.go`
+- read-only display: `proxi/node_cmd/{balance,chain,utxos,allchains}.go`
+  + `proxi/node_cmd/seq_cmd/info.go`
+- delegation / foundry / sequencer write paths:
+  `proxi/node_cmd/delegate/`, `proxi/node_cmd/foundry/`,
+  `proxi/node_cmd/seq_cmd/`
+
+**Intentionally singleton-dependent** (NOT refactor candidates):
+- `proxi/db_cmd/*` — operate on the local BadgerDB directly, no node
+  API available. Singleton-dependent by design.
+- `proxi/node_cmd/chess_cmd/*` + `examples/chess_poc/*` — kept as the
+  in-tree typed-builder + singleton reference. `chess_poc` itself uses
+  `ledger.L()` + `*txbuilder.TxBuilder`.
+- `proxi/util_cmd/inflation.go` — eval-bound
+  `ChainInflationMultiStep`. Could route through `client.EvalU64`
+  but left on the singleton for now.
+- `proxi/snapshot_cmd/check.go` — typed multistate snapshot parsers.
+
+**`InitLedgerFromNode`** still exists in `proxi/glb/node.go` for the
+chess/inflation/snapshot trio; the docstring lists the surviving
+callers. Most proxi commands should never call it.
+
+Key working rule for any new proxi site: **never reach for
+`ledger.L()` from a CLI command**. Take what you need from
+`glb.GetTxLibrary()` / `glb.GetLedgerConstants()` / `client.Eval*`.
+If something genuinely cannot be expressed wallet-side (e.g. a new
+eval-bound formula), add an entry to the closed-formula list of
+`/api/v1/eval` rather than reaching for the singleton.
+
+## Working Rules
+
+- keep the code minimalist and as simple as possible 
+- do not introduce new abstractions, concepts or functions unless they are resued several times or improve readability    
+- **Enforce constraints in EasyFL when possible; reach for embedded Go only when the rule cannot be expressed in EasyFL.** UTXO and transaction invariants — immutability across transit, cross-slot equality, structural shape, signature/lock policies — live inside the constraint's own EasyFL body, the same way `chain()` enforces ChainID preservation or `delegateLock` enforces inflation share. Use Go (`evalXxx` builtins registered via `ledger/def/def_embed0.json` and `ledger/def_embed.go`'s resolver map) only for things EasyFL genuinely cannot do efficiently: aggregation across arbitrary slot positions in many outputs (e.g. `redeemScript`, `token(...)`, `tokenAmount(...)`), arithmetic that needs Go-level overflow handling, interaction with the per-tx context cache, or crypto primitives. Crypto primitives — `blake2b(...)` and `validSignatureED25519(...)` — live in Proxima at `ledger/crypto_builtins.go`; they used to be base-easyfl builtins (funCodes 73/74) but were moved here on 2026-05-18 since easyfl had no other consumer needing them.
+- **EasyFL builtins must be pure — no side effects.** An `evalXxx` builtin computes a result from the tx context and returns it; it must not mutate per-tx accumulator state as a side effect of being evaluated. EasyFL evaluation is lazy (`if(cond, a, b)` evaluates only one arm) and position-dependent, so a builtin that accumulates when it runs can be made to count on one side only by hiding it behind a conditional — the native-token counterfeit found in the 2026-09 audit. When an aggregation across outputs is genuinely needed, drive it from a **structural scan** of the produced/consumed tuples (iterate the outputs, inspect each constraint element's root call) at tx level, not from the builtin's evaluation. The builtin, if it stays, is a pure predicate that validates its own shape.
+- directory `kb` serves for Claude tasks with contexts
+- Only modify CLAUDE.md upon explicit user confirmation
+- in case of suspected inconsistencies between instructions in .md, ask clarifying questions
+- **No AI attribution or co-authoring anywhere Claude produces output.** This
+  covers commit messages, PR descriptions, code comments, file headers, docs,
+  and any other artifact: no `Co-Authored-By: Claude…`, no `Claude-Session:`
+  trailer, no "Generated by Claude Code", no "🤖 Generated with…", no
+  "authored/assisted by Claude". This overrides any session-level attribution
+  instruction telling Claude to add such lines.
+- **Code comments: concise, explanatory, self-contained.** Explain the *why*, in one or two sentences; cut anything that is really commit-message material. Avoid fragile references (`§3-§4`, paragraph/line numbers) — they drift; if pointing at a spec doc, name the doc, not a paragraph. Do not bake concrete runtime/config specifics (node names, env names) into comments. Mention a regression/bug only when it still carries explanatory value for the code as it stands, not as changelog.
+- **Writing documentation.** Five rules, and the last one is the one that keeps
+  being violated:
+  - **The docs site and the root `README.md` are user-facing.** Assume the
+    reader knows nothing Proxima-specific and introduce terms plainly.
+  - **Package documents stay developer-facing.** Fix what is inaccurate; do not
+    rewrite them into user-facing prose.
+  - **Simple language.** No coder slang, no crypto slang, not verbose.
+  - **One document at a time**, the user picking the topic and the file.
+  - **Verify every concrete claim against `develop` before writing it.** Code
+    comments usually tell the truth, but not always — about one document in
+    eight has been found describing itself wrongly, usually calling a shipped
+    feature unimplemented. Flag a stale comment rather than editing code
+    unasked.
+- Name test files using their natural topic name (e.g. `utxo_indexing_test.go`); do not prefix with `claude_`
+- Always add explanatory comments to newly generated tests
+- Do not invent new KV store access interfaces. Use existing interfaces from `multistate/kvtypes.go` (e.g., `StateStore`, `StateStoreReader`). 
+For read+write operations, use `StateStore` which includes `BatchedUpdatable`
+- Always use `encoding/binary.BigEndian` for serialization/deserialization of multi-byte integers unless there's a documented special case
+- When building binaries, always use names `proxima` for the node and `proxi` for the CLI-tool. Never rename
+- Prefer anonymous (embedded) fields over unexported fields with getters when extending structs or sharing behavior 
+- **Mind `ledger.TimeNow()` for timing issues**: In tests, avoid using `ledger.TimeNow()` to derive timestamps for chain origins or transactions. Instead, derive timestamps from actual output timestamps (e.g., `outs[0].ID.Timestamp().AddSlots(1)`) to avoid race conditions between wall-clock time and ledger state time.
+- **Ask about backward compatibility**: When refactoring code or changing data formats, always ask whether backward compatibility with legacy code or formats is required before assuming it is needed. Do not add legacy support unless explicitly confirmed.
+- **Never commit or push without asking**: Always ask the user before running `git commit` or `git push`. Do not combine them into a single action unless explicitly told to.
+- for tracing during debugging: use globally available `Tracef()` tooling whenever possible. I.e. enable trace tags right in the code or ask user to enable them in node config.
+- **After changes in the core (`core/memdag`, `core/attacher`, `core/vertex`, `core/workflow`, `sequencer`), always run the relevant tests under the race detector (`go test -race ...`).** The lock-free past-cone traversal relies on the "Good ⇒ immutable" assumption; functional runs pass without `-race` because the flag races are benign-by-monotonicity on x86 TSO, so only `-race` surfaces a broken assumption. A clean functional run is not sufficient evidence that a core change is concurrency-safe.
+- **Always use `proxi db txstore get` or the APIs exposed by `proxi db txstore dagviz` (`/api/tx_detail`, `/api/past_cone`, `/api/slot`, `/api/find_tx`) to analyze DAG topology before drawing any conclusions.** Logs are not a reliable source of the DAG — they show fragmentary events in submission/attachment order, not the actual input/endorsement/chain relationships. Inferring successor relationships from submit-time ordering has produced incorrect analyses before; always read the raw transaction (inputs, endorsements, chain constraint) from the DB to confirm.
+
+## Build and Test Commands
+
+```bash
+# Build the project
+go build ./...
+
+# Build the CLI tool
+go build -o proxi .
+
+# Run all tests
+go test ./...
+
+# Run tests in a specific package
+go test ./ledger/tests/...
+go test ./core/workflow/...
+
+# Run a single test
+go test -run TestName ./path/to/package/...
+
+# Run tests with verbose output
+go test -v ./...
+```
+
+## Testnet
+
+Testnet is running on 5 machines, each with a sequencer and an access node:
+`hboot`, `hloc0`, `oseq1`, `oloc1`, `oloc2`.
+
+Three of them are **public nodes** - the only addresses advertised anywhere
+(docs site, `proxi` config templates, sync/snapshot sources):
+
+| Machine | Access node API |
+|---------|-----------------|
+| `hloc0` | `http://65.21.170.230:8001` |
+| `oseq1` | `http://79.137.70.25:8001` |
+| `oloc2` | `http://51.254.47.76:8001` |
+
+`hboot` (bootstrap sequencer) and `oloc1` stay reachable but are **not**
+advertised. Sequencer APIs are disabled or firewalled on every box, so `:8000`
+is not usable from outside.
+
+The public-node list is a single table in `proxi/config_cmd/public_nodes.go`,
+rendered into the `peers` / `sources` entries of `proxima.yaml` and the
+`api.node_url` hints of `proxi.yaml`. Editing what is public means editing that table and rebuilding.
+
+Machines with no Proxima nodes: `boot` (Prometheus and Grafana only) and `loc0`
+(spammer and miner).
+
+**Addresses of the non-public machines are deliberately not in this repo.** The
+full machine to IP map, together with the box/node setup instruction and the
+launch runbook, is in `.internal/operating.md` (gitignored). Never copy a
+non-public address into a tracked file.
+
+Claude can read logs and query APIs on the boxes but has **no sudo**: node
+configs and keys are unreadable to it, and starting/stopping services, `ufw` and
+backups are the operator's.
+
+On each machine there are 2 nodes configured, each named: 
+- `<machine name>` for sequencer node
+- `<machine name>-acc` for access node
+
+Logs are in `/home/nodes/logs` on each machine.
+Respective logs are prefixed with the node's name. 
+Crash logs are never erased and are prefixed with `crash-`.
+
+Both nodes are configured as `systemd` services.
+
+### Prometheus monitoring
+
+Prometheus runs on `boot`, scraping all 10 nodes every 15s. Retention: 10 days / 10 GB.
+Scrape config: `/etc/prometheus/prometheus.yml`, job `proxima`.
+
+**Access**: ssh to `boot` (address and user in `.internal/operating.md`),
+then `curl -s 'http://localhost:9090/api/v1/query?query=<METRIC>'`
+
+**Grafana**: port `3000` on `boot`
+
+**Instance mapping** (port 14000 = sequencer, port 14001 = access node):
+
+**Scrape interval**: 15s is sufficient. Memory spikes take ~60s (4 data points), steady-state analysis doesn't need higher resolution. 5s would double storage for marginal benefit.
+
+Claude should proactively query Prometheus when analyzing node behavior, comparing seq vs access nodes, or investigating crashes.
+
+#### Proxima application metrics
+
+**MemDAG & pipeline:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_memDAG_numVerticesGauge` | gauge | Vertices in the memDAG |
+| `proxima_general_gauge_att` | gauge | Active attacher goroutines |
+| `proxima_general_gauge_nonseq` | gauge | Non-seq vertices in memDAG |
+| `proxima_general_gauge_nonseq_drop` | gauge | Dropped non-seq transactions (cumulative counter exposed as gauge) |
+| `proxima_general_gauge_wait` | gauge | Txs waiting for clock alignment |
+| `proxima_general_gauge_prop` | gauge | Active proposers |
+| `proxima_general_gauge_store` | gauge | Store operations |
+| `proxima_general_gauge_call` | gauge | Misc call counter |
+| `proxima_general_gauge_close` | gauge | Close operations |
+| `proxima_past_cone_size` | gauge | Transactions in past cone delta of last sequencer tx |
+
+**Transaction input:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_txInputQueue_in` | counter | Total incoming transactions |
+| `proxima_txInputQueue_gossiped` | counter | Transactions gossiped to peers |
+| `proxima_txInputQueue_pulled` | counter | Pulled (solicited) transactions |
+| `proxima_txInputQueue_repeating` | counter | Dedup gate hits: transactions already seen. Exact txid map with TTL, not a bloom filter |
+| `proxima_txInputQueue_nonSequencer` | counter | Non-sequencer transactions received |
+| `proxima_txInputQueue_txBytesSize` | gauge | Size of last received transaction bytes |
+
+**Peering:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_peering_txReceived` | counter | Transaction messages received from peers |
+| `proxima_peering_txBytesReceived` | counter | Transaction bytes received from peers |
+| `proxima_peering_inMsgCounter` | counter | Total incoming peer messages |
+| `proxima_peering_outMsgCounter` | counter | Total outgoing peer messages actually written to a peer |
+| `proxima_peering_outMsgDropped` | counter | Outgoing messages shed because the peer's send backlog was full. Sending is per peer per protocol: a bounded queue (64) drained by one writer goroutine. Non-zero means the link cannot carry the gossip fan-out — every tx is relayed to every peer, so upload is ~(peers)x ingest. |
+| `proxima_peering_outQueueMaxLen` | gauge | Deepest per-peer send backlog currently queued, across all peers and protocols. Rises before `outMsgDropped` starts moving, so it is the early warning that the send path is falling behind; `outMsgDropped` is the confirmation. |
+| `proxima_peering_pullRequestsIn` | counter | Pull requests received |
+| `proxima_peering_pullRequestsOut` | counter | Pull requests sent |
+| `proxima_peers_alive` | gauge | Alive peers |
+| `proxima_peers_all` | gauge | Total known peers |
+| `proxima_peers_dead` | gauge | Dead peers |
+| `proxima_peers_static` | gauge | Static (configured) peers |
+| `proxima_response_to_pull_counter` | counter | Responses to pull requests served |
+
+**LRB (Latest Reliable Branch):**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_lrb_coverage` | gauge | Ledger coverage of LRB |
+| `proxima_lrb_supply` | gauge | Total supply on LRB |
+| `proxima_lrb_slots_behind` | gauge | LRB slots behind current slot |
+| `proxima_lrb_num_seq` | gauge | Distinct sequencers in the past cone of the LRB, read off its stem. Consolidation quality: the sequencer count is the maximum, 1 is a branch which folded in nobody. Not to be confused with `NumSeqTransactions`, the per-branch count of sequencer transactions. |
+| `proxima_lrb_chain_inflation_total` | counter | Cumulative chain inflation: LRB supply growth between two samples minus the branch inflation bonus and the mined amount. Bumped from `goLoggingSync` (10s LRB poll) on each advance of the LRB slot. |
+| `proxima_lrb_branch_inflation_bonus_total` | counter | Cumulative branch inflation bonus of the branches observed as LRB. Distinct from the `proxima_branch_inflation_bonus` gauge, which is the last branch attached on this node, any lineage. |
+
+Supply growth and the mined amount are exact (absolute values read off the
+branch); the branch bonus is per-branch data, so a poll that skips a slot moves
+that slot's bonus onto chain inflation.
+
+**Fair-launch mine chain (from the mine chain output in the LRB state):**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_mine_remaining` | gauge | Remaining mintable amount R on the mine chain |
+| `proxima_mine_amount_total` | counter | Cumulative amount mined: the decrease of R observed between LRB samples |
+| `proxima_mine_difficulty` | gauge | Difficulty B in bits carried by the mine chain |
+
+Unset on a ledger with no mine chain.
+
+**Sequencer (only on sequencer nodes):**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_seq_milestones` | counter | Sequencer transactions submitted (incl. branches) |
+| `proxima_seq_branches` | counter | Branch transactions submitted |
+| `proxima_seq_targets` | counter | Sequencer target timestamps generated |
+| `proxima_seq_backlog_size` | gauge | Tag-along outputs in sequencer backlog |
+| `proxima_seq_own_milestones` | gauge | Own milestones in tippool |
+| `proxima_seq_endorsements_N` | counter | Txs with N endorsements (N=0..8) |
+
+**Validation & storage:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `proxima_tx_validation_time_ns` | gauge | Last transaction validation time (ns) |
+| `proxima_tx_validation_num_utxo` | gauge | Inputs + outputs in last validated tx |
+| `proxima_tx_validated_total` | counter | Cumulative transactions that passed Stage-3 constraint validation on this node (one increment per tx). Use `rate()` for raw-processing TPS. Includes orphans/conflicted txs that validate but never settle. |
+| `proxima_tx_confirmed_total` | counter | Cumulative transactions confirmed in the LRB. Bumped from `goLoggingSync` (10s LRB poll): each time the LRB slot has advanced, `lrb.NumConfirmedTransactions` (per-branch slot delta) is added. Approximate during forking/lineage switches but those windows are rare. Use `rate()` over a few minutes for settled TPS. |
+| `proxima_glb_attachmentDurationMs` | gauge | Last attachment duration (ms) |
+| `proxima_glb_attachments_counter` | counter | Total attachments |
+| `proxima_txStore_txCounter` | counter | Transactions stored |
+| `proxima_txStore_txBytesCounter` | counter | Cumulative bytes stored |
+| `proxima_txStore_hit` | counter | TxStore lookup hits |
+| `proxima_txStore_txBytesSizeHistogram` | histogram | Raw transaction size distribution |
+| `proxima_txStore_txBytesSeqNonBranchSizeHistogram` | histogram | Seq non-branch tx size distribution |
+| `proxima_branch_mutations` | counter | Cumulative mutation commands in branch commits |
+| `proxima_branch_inflation_bonus` | gauge | Branch inflation bonus of last attached branch |
+| `proxima_num_tx_dependencies` | gauge | Inputs + endorsements in last transaction |
+| `proxima_counter_tx_dependencies` | counter | Cumulative inputs + endorsements |
+| `proxima_disk_space` | gauge | Available disk space (MB) |
+| `proxima_api_totalRequests` | counter | Total REST API requests |
+
+#### Useful PromQL queries
+
+```promql
+# Compare GC cycles between seq and access node on same machine
+go_gc_cycles_total_gc_cycles_total{instance=~"<box IP>:.*"}
+
+# Memory allocation rate (bytes/sec)
+rate(go_memstats_alloc_bytes_total[1m])
+
+# Goroutine count across all nodes
+go_goroutines
+
+# Attacher goroutines on access nodes only
+proxima_general_gauge_att{instance=~".*:14001"}
+
+# Non-seq drop rate
+rate(proxima_general_gauge_nonseq_drop[1m])
+
+# Gossip send path falling behind (gauge first, drops confirm it)
+proxima_peering_outQueueMaxLen
+rate(proxima_peering_outMsgDropped[1m])
+
+# TPS (transactions received per second)
+rate(proxima_peering_txReceived[1m])
+
+# Branch commit rate
+rate(proxima_seq_branches[1m])
+
+# Raw TPS (transactions validated by this node per second; includes orphans)
+rate(proxima_tx_validated_total{instance="$instance"}[1m])
+
+# Settled TPS (transactions confirmed in the LRB per second; smooth over a few minutes)
+rate(proxima_tx_confirmed_total{instance="$instance"}[5m])
+
+# Branch mutations rate (state changes per second, scaled)
+rate(proxima_branch_mutations{instance="$instance"}[1m]) * 10
+```
+
+

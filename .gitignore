@@ -1,0 +1,27 @@
+# Build outputs and temporary validation data
+/out/
+/dist/
+/work/
+/build/*
+!/build/Build.ps1
+!/build/build.py
+!/build/Validate.ps1
+!/build/source-lock.json
+!/build/upstream-files.json
+/runtime/python/
+**/__pycache__/
+*.py[cod]
+*.exe
+*.dll
+*.pyd
+*.cat
+*.zip
+*.partial
+# Personal runtime state must never be published
+/wallet/
+/logs/
+/data/
+/acceptance-totals.json
+/performance.json
+/device-profile.json
+/setup-status.json

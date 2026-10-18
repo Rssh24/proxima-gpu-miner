@@ -1,0 +1,102 @@
+# Proxi wallet profile
+
+# default sequencer ID is used when own or tag-along sequencer is not specified
+default_sequencer_id: {{.BootstrapSeqID}}
+
+wallet:
+    key_file: {{.KeyFile}}
+    holder_id: {{.HolderID}}
+    # sequencer_id is the sequencer ID controlled by the private key of this wallet.
+    # The controller wallet can withdraw tokens from the sequencer chain with command 'proxi node seq withdraw'.
+    # Set by 'proxi node seq init_genesis'; while unset, commands fall back to default_sequencer_id above
+    # sequencer_id: <own sequencer ID>
+api:
+    # URL of the node API this wallet talks to. Default is a node on the same machine;
+    # replace it with one of the public Proxima nodes listed below to use a remote node.
+    # 'endpoint' is the legacy name of this key and is still read
+    node_url: http://127.0.0.1:8000
+{{range .PublicNodes}}    # {{.Name}}: {{.APIEndpoint}}
+{{end}}    # Witness nodes. The wallet accepts the node's ledger library only with a proof that a
+    # branch commits to it, and asks these nodes to confirm that branch, so an intercepted or
+    # lying node_url cannot hand it a forged library. Nothing else is fetched from them.
+    # Leave the list empty on a standalone or private network: the check is then skipped with a warning.
+    node_urls:
+{{range .AllPublicNodes}}        - {{.APIEndpoint}}
+{{end}}
+
+tag_along:
+    # The fee is a preference, not the price: what is actually paid is the bigger of this
+    # and the minimum fee the target sequencer declares. A transaction paying less than
+    # that minimum is refused by the sequencer, so raise this only to outbid other senders
+    fee: 1
+    # 'random' picks a sequencer that has been active within the last slot, a fresh choice
+    # per proxi run, and fails if none is active. Replace it with a sequencer ID to always
+    # tag along to the same one
+    sequencer_id: random
+
+delegate:
+    # The delegator (inflation) cut this wallet requires from a delegation target, in
+    # promille: the share of the delegation's inflation that must go to the delegator,
+    # the rest being the target sequencer's own cut. It is the default of the
+    # --cut / --minimum_cut flags of 'proxi node dlg'. A sequencer whose own cut
+    # leaves less than this refuses the delegation. 'proxi node mine' and
+    # 'proxi node consolidate' do not read it: they take the cut each target leaves
+    minimum_cut: 900
+
+consolidate:
+    # Where the wallet's tokens are put to work. 'proxi node mine' reads
+    # send_to_sequencer, autodelegate, target_delegations and target_delegation_prox
+    # to place each reward. All keys are settings of 'proxi node consolidate', an
+    # optional process for tidying: it sweeps the outputs scattered over this
+    # wallet and puts what is above the minimum back into consensus. Every key has
+    # a flag of the same name on 'proxi node consolidate' that overrides it.
+    # act once the consolidatable balance exceeds this, in PROX
+    threshold_prox: 300
+    # balance always kept in the wallet on plain sigLock outputs, in PROX
+    minimum_balance_prox: 100
+    # most outputs one consolidating transaction consumes
+    max_inputs: 30
+    # compact as soon as this many consolidatable outputs have piled up, even
+    # below the threshold
+    compact_at: 10
+    # 'own' sends everything above the minimum to wallet.sequencer_id, which must
+    # be controlled by this wallet; a sequencer ID sends it to that sequencer;
+    # empty leaves the tokens in the wallet (see autodelegate)
+    send_to_sequencer:
+    # applies only when send_to_sequencer is empty: 'random' (the default)
+    # delegates to an active sequencer drawn by its rating (see 'proxi node
+    # seq_rating'), a sequencer ID always delegates to that one, 'none' only
+    # compacts. The delegation requires exactly the cut its target leaves.
+    autodelegate: random
+    # number of own delegations to build up to; beyond it existing ones are
+    # topped up, and extra ones are folded together
+    target_delegations: 5
+    # size a delegation is grown to before the next one is created, in PROX
+    target_delegation_prox: 10000
+
+mine:
+    # Settings of 'proxi node mine'. The flags of the miner stay as they are.
+    # Where the reward goes is decided per round from the 'consolidate' section
+    # above: top-ups of own delegations, new ones up to target_delegations, or
+    # send_to_sequencer (kb/mine_payout_options.md).
+    # external nonce seekers (kb/external_nonce_seeker.md): the recommended way to
+    # mine faster, since the search is where all the speed is
+    seeker:
+        # address the miner serves mining jobs on to external nonce seekers, such
+        # as the reference seeker in proxi/node_cmd/mine/nonce_seeker. Empty means
+        # none: the miner searches with its own workers only, as before. With a
+        # listener, '--workers 0' leaves the whole search to the seekers
+        listen:
+        # shared secret the seekers present as a bearer token; empty means none,
+        # which is only reasonable on a loopback listener
+        token:
+        # true runs the reference seeker beside the miner: the miner listens on a
+        # free loopback port with a fresh token, starts the binary with everything
+        # filled in, including the key passphrase, restarts it if it exits and stops
+        # it with the miner; the search goes to it, '--workers' adds local workers.
+        # Same as 'proxi node mine --seeker'
+        spawn: false
+        # the seeker binary to spawn; empty means 'nonce_seeker' on PATH or beside proxi
+        binary:
+        # search threads of the spawned seeker; 0 means every core
+        threads: 0

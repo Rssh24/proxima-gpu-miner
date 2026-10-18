@@ -1,0 +1,1212 @@
+package mine
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"math"
+	"math/bits"
+	mathrand "math/rand"
+	"os"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lunfardo314/proxima/api/client"
+	"github.com/lunfardo314/proxima/consolidator"
+	"github.com/lunfardo314/proxima/global"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/lunfardo314/proxima/proxi/glb"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/consolidate"
+	"github.com/lunfardo314/proxima/sequencer/txbuilder_seq"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/lunfardo314/proxima/util/vrf"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+// `proxi node mine` is the fair-launch mining tool. It repeatedly consumes the single mine chain UTXO, builds a valid transition
+// (successor mine output + sig-locked payout + tag-along), searches a nonce
+// whose ECVRF output (RFC 9381) under the wallet key, over predecessor ID ||
+// slot || nonce, ends in >= K(M) trailing zero bits, and submits it with the
+// proof in the mine output's unlock parameters.
+//
+// An attempt is one VRF output: a hash-to-curve plus one variable-base scalar
+// multiplication under the wallet key, nothing else. The transaction is built
+// once per target and touched only for the winner, which gets the completed
+// proof and the signature. The VRF output is unique per (key, message), so
+// there is no free variable to grind more cheaply, and the key must be present
+// for every attempt: the work is key-bound and cannot be pooled or delegated
+// without handing over the wallet key. It is not GPU- or ASIC-resistant.
+//
+// SPECULATIVE MINING ON A TREE. Waiting for a submitted transit to become
+// LRB-confirmed before starting the next one wastes most of the miner's time:
+// confirmation takes many slots, mining one transit takes about one pace. So
+// the miner does not wait — it extends the best branch it knows immediately.
+//
+// That branch comes from a tree of verified transits (mine_tree.go), fed by the
+// node's mining transaction stream (mine_stream.go) and re-rooted by the LRB
+// monitor. Every transit entering the tree — including this miner's own — is
+// verified from its raw bytes against its predecessor (mine_verify.go), because
+// the stream relays transits the node has not constraint-validated.
+//
+// The tree exists to make mining fair. Extending one's own unconfirmed transit
+// is the right strategy, but if the only way to learn that someone else won a
+// height is LRB confirmation, the producer of a transit is ahead of everyone
+// else for longer than it takes to mine one — so whoever wins once wins
+// forever. The stream collapses that lead to a gossip hop, and the tie-break
+// (most proof of work, never first-seen) makes sure nothing prefers a transit
+// merely for being ours. See kb/archive/shipped/mining_tx_streaming.md.
+//
+// Everything the miner does against the node is retried: it is a long-running
+// process and must survive node restarts, API timeouts and transient HTTP
+// failures instead of aborting on the first error.
+//
+// Mining leaves one payout UTXO per confirmed transit and the miner never
+// touches it again: putting payouts to work is the wallet's job, done by
+// `proxi node consolidate` running on the same profile (kb/consolidate.md).
+
+// MinerVersion is the version this miner writes into every transit it builds.
+// The ledger's constMinerVersion must equal it, or the transit is invalid:
+// the constant is bumped when every miner must move to a new release, and
+// this miner stops the moment it sees the ledger ahead of it.
+const MinerVersion uint32 = 4
+
+const (
+	// how often the confirmation monitor polls the LRB mine chain tip.
+	mineMonitorPeriod = 2 * time.Second
+
+	// The node refuses transactions stamped more than a few slots ahead of its
+	// wall clock and holds anything still in the future until the clock catches
+	// up. Speculative mining stamps the successor a target pace above a
+	// predecessor which may itself be unconfirmed and future-stamped, so the
+	// miner keeps its own margin below that bound: a solved transaction is held
+	// back until its slot is within mineMaxFutureSlots of the current slot.
+	mineMaxFutureSlots = 4
+
+	// Floor for the confirmation-stall timeout: if none of this miner's submitted
+	// transits confirms for at least this long (and difficulty is low), the
+	// speculative branch is presumed lost (dropped tag-along, node restart,
+	// partition) and the miner re-anchors even though no competing transit is
+	// visible. At higher difficulty the timeout scales up (see stallTimeout), so a
+	// legitimately slow high-K transit is not abandoned mid-solve.
+	mineConfirmationStall = 90 * time.Second
+	// The stall timeout is at least this many expected solve-times (2^K/hashrate),
+	// capped at mineStallMax. Generous: the pace-relieved difficulty makes a wedge
+	// impossible (K falls with the gap), so a long stall only delays detecting a
+	// genuinely dropped tx.
+	mineStallSolveFactor = 3.0
+	mineStallMax         = 10 * time.Minute
+
+	// bounds of the exponential backoff between retries of a node call.
+	mineRetryBase = 500 * time.Millisecond
+	mineRetryMax  = 15 * time.Second
+	// pause before the next round when no sequencer can take the reward
+	noTargetWait = 2 * time.Second
+	// how long before a slot's settlement its round stops, so the last solution
+	// is delivered and gossiped to the sequencers before they settle the slot
+	mineSubmitMargin = 700 * time.Millisecond
+
+	// attempts of one fetch of the sequencer list before the round falls back
+	// to the last list or, with none recent enough, to the opening payout
+	seqFetchAttempts = 2
+	// hard cap of mine.sequencers_refresh_slots: a sequencer stays active for
+	// a few slots after its last milestone, so an older list misjudges targets
+	maxSeqFetchSlots = 5
+	// how long a sequencer that let one of our transits stall is left out of
+	// the payout targets
+	stalledTargetSlots = 60
+)
+
+// mineStats accumulates run-wide totals for the periodic totals line.
+// Guarded by miner.mu: the mining loop bumps the mined/attempt counters, the
+// monitor goroutine bumps the confirmation-driven ones.
+type mineStats struct {
+	start    time.Time
+	mined    int    // transits solved and submitted
+	transits int    // own transits seen confirmed in the LRB
+	orphaned int    // own transits dropped when a competing transit confirmed
+	minted   uint64 // A * transits
+	attempts uint64 // cumulative PoW attempts across all transits
+}
+
+func InitMineCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mine",
+		Short: "mine the fair-launch mine chain: build, solve and submit mine transitions in a loop",
+		Args:  cobra.NoArgs,
+		Run:   runMineCmd,
+	}
+	cmd.Flags().Int("workers", runtime.NumCPU(), "parallel mining workers")
+	cmd.Flags().Float64("max-hashrate-khs", 0, "cap on the total hashrate over all workers, in KH/s (0 = unlimited)")
+	cmd.Flags().Uint64("nonce-start", 0, "first nonce of every round (0 = a fresh random start per round, so several processes mining under one key search disjoint nonce ranges)")
+	cmd.Flags().Int("count", 0, "number of transits to mine (0 = until exhausted or interrupted)")
+	// a round now lasts until its slot's submit deadline; the flag is accepted
+	// so that start scripts written for the earlier miner keep working
+	cmd.Flags().Int("refetch", 0, "ignored")
+	_ = cmd.Flags().MarkDeprecated("refetch", "a round lasts until shortly before its slot's settlement; the flag has no effect")
+	// the miner no longer consolidates; the flag is accepted so that start
+	// scripts written for the earlier miner keep working
+	cmd.Flags().StringSlice("stream", nil, "extra node endpoints to subscribe to for mining transactions (in addition to api.endpoint); several make withholding by any single node ineffective")
+	cmd.Flags().Bool("no-stream", false, "do not subscribe to the mining transaction stream (falls back to LRB-only detection, which is systematically slower than a competitor's own view)")
+	cmd.Flags().Bool("seeker", false, "run the reference nonce seeker beside the miner, from mine.seeker.binary or 'nonce_seeker' on PATH; the search goes to it, --workers adds local workers (same as mine.seeker.spawn)")
+	cmd.InitDefaultHelpCmd()
+	return cmd
+}
+
+func runMineCmd(cmd *cobra.Command, _ []string) {
+	workers, _ := cmd.Flags().GetInt("workers")
+	// external nonce seekers (kb/external_nonce_seeker.md): with a listener
+	// configured the local workers are optional; a spawned reference seeker
+	// takes the whole search unless --workers says otherwise
+	seekerListen := viper.GetString("mine.seeker.listen")
+	spawnFlag, _ := cmd.Flags().GetBool("seeker")
+	spawnSeeker := spawnFlag || viper.GetBool("mine.seeker.spawn")
+	if spawnSeeker {
+		if seekerListen == "" {
+			seekerListen = "127.0.0.1:0"
+		}
+		if !cmd.Flags().Changed("workers") {
+			workers = 0
+		}
+	}
+	glb.Assertf(workers >= 1 || seekerListen != "",
+		"--workers 0 leaves the whole search to nonce seekers: set mine.seeker.listen for external ones, or --seeker / mine.seeker.spawn to run the reference seeker here")
+	workers = max(workers, 0)
+	maxHashrateKHs, _ := cmd.Flags().GetFloat64("max-hashrate-khs")
+	glb.Assertf(maxHashrateKHs >= 0, "--max-hashrate-khs must not be negative")
+	count, _ := cmd.Flags().GetInt("count")
+	nonceStart, _ := cmd.Flags().GetUint64("nonce-start")
+	extraStreams, _ := cmd.Flags().GetStringSlice("stream")
+	noStream, _ := cmd.Flags().GetBool("no-stream")
+	walletData := glb.GetWalletData()
+	consts := glb.GetLedgerConstants()
+	// where the reward goes is decided per round with the consolidator's
+	// settings: the target number and size of delegations, an own sequencer
+	cfg, err := consolidate.ReadConfig(nil, consts)
+	glb.AssertNoError(err)
+
+	tagAlongSeqID := glb.GetTagAlongSequencerID()
+	glb.Assertf(tagAlongSeqID != nil, "tag-along sequencer not specified")
+	prover, err := vrf.NewProver(walletData.PrivateKey)
+	glb.AssertNoError(err)
+
+	m := &miner{
+		cfg:            cfg,
+		consts:         consts,
+		lib:            glb.GetTxLibrary(),
+		c:              glb.GetClient(),
+		wallet:         walletData,
+		holderID:       base.HolderIDFromED25519PrivateKey(walletData.PrivateKey),
+		prover:         prover,
+		tagAlongSeqID:  *tagAlongSeqID,
+		workers:        workers,
+		maxHashrate:    maxHashrateKHs * 1000,
+		nonceStart:     nonceStart,
+		extraClients:   extraSubmitClients(extraStreams),
+		seqFetchSlots:  min(max(viper.GetInt("mine.sequencers_refresh_slots"), 1), maxSeqFetchSlots),
+		stalledTargets: make(map[base.ChainID]uint32),
+	}
+	m.st.start = time.Now()
+
+	if seekerListen != "" {
+		token := viper.GetString("mine.seeker.token")
+		if spawnSeeker && token == "" {
+			token = randomToken()
+		}
+		m.seekers = newSeekerServer(prover, walletData.PrivateKey.Public().(ed25519.PublicKey), token)
+		ln, err := m.seekers.listen(seekerListen)
+		glb.AssertNoError(err)
+		m.seekerAddr = ln.Addr().String()
+		go func() {
+			glb.AssertNoError(m.seekers.serve(ln))
+		}()
+		if spawnSeeker {
+			binary, err := resolveSeekerBinary(viper.GetString("mine.seeker.binary"))
+			glb.AssertNoError(err)
+			host, _ := os.Hostname()
+			m.spawned = newSeekerSpawn(binary,
+				seekerArgs("http://"+m.seekerAddr, token, viper.GetString("wallet.key_file"), viper.GetInt("mine.seeker.threads"), "seeker@"+host),
+				glb.KeyPassphrase())
+			m.spawnedBinary = binary
+		}
+	}
+
+	// the tag-along fee of a mine transit is fixed by the ledger; a sequencer
+	// asking more than that never picks a transit up
+	m.fee = consts.MineTagAlongFee
+	// the ledger this miner runs on, presented to the mining stream: the node
+	// refuses a client on another ledger
+	slot0 := uint32(0)
+	lib0, errLib := m.c.GetLibrary(&slot0)
+	glb.AssertNoError(errLib)
+	h0 := lib0.LibraryHash()
+	m.ledgerHash = hex.EncodeToString(h0[:])
+	glb.Assertf(consts.MinerVersion == MinerVersion, "%s", minerVersionMismatch(consts.MinerVersion))
+	requiredFee, err := retryCall("required tag-along fee", 0, func() (uint64, error) {
+		return glb.GetRequiredTagAlongFee(m.tagAlongSeqID)
+	})
+	glb.AssertNoError(err)
+	glb.Assertf(requiredFee <= m.fee,
+		"sequencer %s requires a tag-along fee of %s, above the fixed mine transit fee %s: it would never take a transit",
+		m.tagAlongSeqID.StringShort(), util.Th(requiredFee), util.Th(m.fee))
+
+	streamEndpoints := miningStreamEndpoints(noStream, extraStreams)
+	m.banner(streamEndpoints)
+	if m.spawned != nil {
+		go m.spawned.run()
+		defer m.spawned.kill()
+	}
+	m.run(count, streamEndpoints)
+}
+
+// miningStreamEndpoints is the configured node plus any extras. Subscribing to
+// more than one matters because a node cannot forge a transit — every one is
+// verified locally — but it can withhold one, which silently restores the
+// information asymmetry the stream exists to remove.
+func miningStreamEndpoints(noStream bool, extra []string) []string {
+	if noStream {
+		return nil
+	}
+	ret := make([]string, 0, len(extra)+1)
+	if own := glb.NodeAPIURL(); own != "" {
+		ret = append(ret, own)
+	}
+	for _, e := range extra {
+		if e = strings.TrimSpace(e); e != "" && !slices.Contains(ret, e) {
+			ret = append(ret, e)
+		}
+	}
+	return ret
+}
+
+func (m *miner) banner(streamEndpoints []string) {
+	glb.Infof("")
+	glb.Infof("================= PROXIMA BOOTSTRAP MINER =================")
+	glb.Infof(" VRF-bound proof-of-work miner for the fair-launch mine chain.")
+	glb.Infof(" Each transit mints a fixed reward A by finding a nonce whose")
+	glb.Infof(" VRF output under the wallet key ends in >= K trailing zero")
+	glb.Infof(" bits. Every attempt needs the key, so the work cannot be")
+	glb.Infof(" pooled or delegated. It is not GPU- or ASIC-resistant.")
+	glb.Infof(" K does not depend on the step length; the chain retargets")
+	glb.Infof(" K by one bit per transit to hold the pace.")
+	glb.Infof("----------------------------------------------------------")
+	description, err := m.lib.Description()
+	glb.AssertNoError(err)
+	glb.Infof(" version       : %s, commit %s", global.Version, global.CommitHash)
+	glb.Infof(" ledger        : %s", description)
+	glb.Infof(" miner account : %s", m.wallet.Account.String())
+	a := m.currentA()
+	glb.Infof(" reward A      : %s as one tag-along; or %s PROX + fee %s into a new delegation; or %s PROX + fee to the account once, to open it",
+		util.Th(a), util.Th(m.consts.MineDelegationAmountProx), util.Th(m.fee), util.Th(m.consts.MineOpeningAmountProx))
+	switch {
+	case m.cfg.SendOwn && m.cfg.SendTo != nil:
+		glb.Infof(" payouts       : the full reward to own sequencer %s while it is active, delegations otherwise", m.cfg.SendTo.String())
+	default:
+		glb.Infof(" payouts       : chosen per round by profit: top-ups of own delegations, up to %d of them grown to %s each, new ones at %s PROX",
+			m.cfg.TargetDelegations, util.Th(m.cfg.TargetSize), util.Th(m.consts.MineDelegationAmountProx))
+	}
+	glb.Infof(" schedule      : %s flat until slot %d, then +%s per slot",
+		util.Th(m.consts.MineAmountBase), m.consts.MineRampStartSlot, util.Th(m.consts.MineAmountPerSlot))
+	glb.Infof(" tag-along seq : %s", m.tagAlongSeqID.String())
+	glb.Infof(" workers       : %d   difficulty band: [%d, %d]", m.workers, m.consts.MineFloorDifficulty, m.consts.MineMaxDifficulty)
+	if m.seekers != nil {
+		auth := "no token"
+		if m.seekers.token != "" {
+			auth = "bearer token"
+		}
+		glb.Infof(" nonce seekers : serving jobs on %s (%s); see kb/external_nonce_seeker.md", m.seekerAddr, auth)
+		if m.spawned != nil {
+			threads := "all cores"
+			if n := viper.GetInt("mine.seeker.threads"); n > 0 {
+				threads = strconv.Itoa(n) + " threads"
+			}
+			glb.Infof(" spawned seeker: %s (%s), restarted if it exits, stopped with the miner", m.spawnedBinary, threads)
+		}
+	}
+	if m.maxHashrate > 0 {
+		glb.Infof(" max hashrate  : %s KH/s", strconv.FormatFloat(m.maxHashrate/1000, 'f', -1, 64))
+	}
+	if m.nonceStart == 0 {
+		glb.Infof(" nonce start   : random per round")
+	} else {
+		glb.Infof(" nonce start   : %d (fixed)", m.nonceStart)
+	}
+	glb.Infof(" pace          : one step per slot (min P %d); a bit harder after %d full slots, a bit easier per empty slot",
+		m.consts.MineMinPace, m.consts.MineHardenAfter)
+	glb.Infof(" settlement    : sequencers settle a slot's transits from tick %d; a round ends there", m.consts.MineSettlementTick())
+	if until := m.consts.DisableMiningUntilSlot; m.nowSlot() < until {
+		glb.Infof(" start         : mining opens at slot %d, %s; the miner waits", until, m.opensAt(until))
+	}
+	if len(streamEndpoints) == 0 {
+		glb.Infof(" mining stream : OFF — competing transits are only seen once the LRB confirms them")
+	} else {
+		glb.Infof(" mining stream : %s", strings.Join(streamEndpoints, ", "))
+	}
+	glb.Infof("==========================================================")
+}
+
+// mineTip is the mine chain output the next transit is built on: either the
+// LRB-confirmed tip, or the successor of a transaction this miner has just
+// submitted and which nobody has confirmed yet (speculative).
+type mineTip struct {
+	oid         base.OutputID
+	data        []byte
+	ml          *txbuildercore.MineLockView
+	cc          *txbuildercore.ChainConstraintView
+	balance     uint64
+	vrfOutput   []byte // VRF output of the transit that produced this tip (nil for the confirmed root)
+	speculative bool
+}
+
+func parseMineTip(lib *txbuildercore.Library[any], oid base.OutputID, data []byte, speculative bool) (*mineTip, error) {
+	o, err := txbuildercore.OutputFromBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("mine tip: %w", err)
+	}
+	ml, err := lib.ParseMineLock(o.MustConstraintAt(txbuildercore.ConstraintIndexLock))
+	if err != nil {
+		return nil, err
+	}
+	cc, err := lib.ParseChainConstraint(o.MustConstraintAt(txbuildercore.ConstraintIndexChain))
+	if err != nil {
+		return nil, err
+	}
+	balance, err := txbuildercore.DecodeTokenBalance(data)
+	if err != nil {
+		return nil, err
+	}
+	return &mineTip{oid: oid, data: data, ml: ml, cc: cc, balance: balance, speculative: speculative}, nil
+}
+
+// miner holds the whole run: immutable configuration plus the state shared
+// between the mining loop and the confirmation monitor.
+type miner struct {
+	consts        *txbuildercore.Constants
+	cfg           consolidator.Config // the consolidator's settings decide where the reward goes
+	known         bool                // the ledger knows this wallet's holder (set once true)
+	pinnedDown    bool                // the configured delegation target is unavailable and the draw stands in; logged once each way
+	ownDown       bool                // the own sequencer is not active and rewards go into delegations; logged once each way
+	noTarget      bool                // no active sequencer can take the reward and the loop waits; logged once each way
+	prover        *vrf.Prover         // the wallet key, expanded once for the hot loop
+	lib           *txbuildercore.Library[any]
+	c             *client.APIClient
+	wallet        glb.WalletData
+	holderID      base.HolderID
+	tagAlongSeqID base.ChainID
+	fee           uint64 // tag-along fee of the mine tx, fixed by the ledger
+	ledgerHash    string // hex library hash at slot 0, presented to the mining stream
+	workers       int
+	maxHashrate   float64       // cap on attempts/sec over all workers; 0 = unlimited
+	nonceStart    uint64              // first nonce of every round; 0 = random per round
+	extraClients  []*client.APIClient // the --stream nodes, which get every transit too
+	seekers       *seekerServer       // external nonce seekers; nil = none configured
+	seekerAddr    string        // address the job server listens on
+	spawned       *seekerSpawn  // the reference seeker run beside the miner; nil = none
+	spawnedBinary string
+	seqFetchSlots int                                               // target slots between fetches of the sequencer list, 1..maxSeqFetchSlots
+	seqs          map[base.ChainID]txbuildercore.SequencerCandidate // the last fetched list of active sequencers
+	seqsSlot      uint32                                            // the target slot it was fetched for
+	// stalledTargets maps a sequencer that let one of our transits stall to
+	// the slot until which it is left out of the targets; guarded by mu
+	stalledTargets map[base.ChainID]uint32
+
+	// abort is set whenever the tip being mined stops being the branch to
+	// extend — by a streamed competing transit or by an LRB confirmation — and
+	// is polled by the mining workers, so a round whose target is already dead
+	// is dropped instead of running to its deadline. Only the loop clears it, at
+	// the top of each round, so a signal can never be lost between rounds.
+	abort      atomic.Bool
+	difficulty atomic.Int64 // last K, for the totals line and the stall timeout
+	hashrate   atomic.Int64 // last measured attempts/sec, for the stall timeout
+
+	// tree is the shared view of the mine chain: the mining loop reads the tip
+	// to extend from it, the stream feeds verified transits into it, and the LRB
+	// monitor re-roots it. It carries its own lock.
+	tree *mineTree
+
+	mu sync.Mutex
+	st mineStats
+}
+
+func (m *miner) run(count int, streamEndpoints []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	root, err := m.fetchConfirmedTip()
+	if err != nil {
+		glb.Infof("cannot fetch the mine chain output: %v", err)
+		return
+	}
+	m.tree = newMineTree(root)
+	glb.Infof("anchored on confirmed transit #%d %s", root.cc.TransitionCounter, root.oid.StringShort())
+	m.awaitMiningOpen()
+
+	// Start the stream before the first round: a transit that lands while we are
+	// mining must abort the round, which is the whole point of subscribing.
+	m.runStreams(ctx, streamEndpoints)
+	go m.monitorConfirmations(ctx)
+
+	hashrate := 0.0 // attempts/sec, measured across mining rounds; 0 = not yet known
+	for count == 0 || m.minedCount() < count {
+		if !m.minerVersionCurrent() {
+			return
+		}
+		m.abort.Store(false)
+		tip := m.tree.takeBestForMining()
+
+		predSlot := tip.oid.Timestamp().Slot
+		succSlot := m.successorSlot(predSlot)
+		// the reward layout of this transit, and with it what it mints; A
+		// depends on the slot the transit is stamped in, so the exhaustion
+		// test is made against the successor slot, not against now
+		payout, ok := m.choosePayout(succSlot)
+		if !ok {
+			time.Sleep(noTargetWait)
+			continue
+		}
+		if tip.ml.R < payout.minted {
+			glb.Infof("mine chain is exhausted: remaining mintable %s < %s", util.Th(tip.ml.R), util.Th(payout.minted))
+			break
+		}
+		// K = max(B - (M - P), E): the full B at the minimum pace, one bit easier per
+		// extra slot of gap. Stamping the earliest legal slot (successorSlot) targets
+		// the highest K; when the clock forces a later stamp the gap grows and K drops.
+		k := int(m.consts.MineRequiredK(tip.ml.B, uint64(succSlot-predSlot)))
+		succB, succC := m.consts.MineRetarget(tip.ml.B, tip.ml.C, predSlot, succSlot)
+		m.difficulty.Store(int64(k))
+
+		// The round competes for one slot until shortly before its settlement:
+		// the slot goes to the smallest VRF output the sequencers hold by then,
+		// so a miner's chance is the number of draws it makes in the window,
+		// and stopping at the first solution would forfeit most of them.
+		deadline := m.roundDeadline(succSlot)
+		if time.Until(deadline) <= 0 {
+			continue
+		}
+		glb.Infof("mining transit #%d%s: R=%s difficulty K=%d target slot %d (pace %d, successor B=%d, full slots %d), reward: %s ...",
+			tip.cc.TransitionCounter+1, m.branchSuffix(tip), util.Th(tip.ml.R), k, succSlot, succSlot-predSlot, succB, succC, payout.why)
+		glb.Verbosef("   until %v (expected ~%s attempts per solution at %s H/s)",
+			time.Until(deadline).Round(time.Millisecond), util.Th(uint64(math.Ldexp(1, k))), util.Th(uint64(hashrate)))
+
+		// the bar a solution must pass: the best transit known on the tip, own
+		// or not. One already settled at an older slot cannot be beaten at all.
+		beat := func() []byte {
+			b, slot, ok := m.tree.bestOnParent(tip.oid)
+			if ok && slot < succSlot {
+				m.abort.Store(true)
+			}
+			return b
+		}
+		submitted := 0
+		onSolution := func(sol mineSolution) {
+			txb, predIdx := m.buildTransit(tip, succSlot, succB, succC, payout)
+			txb.PutUnlockParams(predIdx, txbuildercore.ConstraintIndexLock, txbuildercore.MineUnlockParams(sol.proof, sol.nonce))
+			txb.SignED25519(m.wallet.PrivateKey)
+			winBytes := txb.Bytes()
+			txid, err := txbuildercore.TxIDFromBytes(winBytes)
+			glb.AssertNoError(err) // pure local computation over bytes just built
+			what := "SOLVED"
+			if submitted > 0 {
+				what = "IMPROVED"
+			}
+			glb.Infof("   %s transit #%d; submitting %s", what, tip.cc.TransitionCounter+1, txid.StringShort())
+			if !m.awaitStampWindow(succSlot) {
+				return // superseded while waiting for the clock
+			}
+			if !m.submit(winBytes, tip.data) {
+				// the chain likely moved under us; re-anchor on what is confirmed
+				if p, err := m.fetchConfirmedTip(); err == nil {
+					m.tree.setRoot(p)
+					m.releasePending()
+				}
+				m.abort.Store(true)
+				return
+			}
+			if submitted == 0 {
+				m.mu.Lock()
+				m.st.mined++
+				m.mu.Unlock()
+			}
+			submitted++
+			// Our own transit goes through exactly the same verification and
+			// tie-break as anyone else's: nothing here may prefer it merely for
+			// being ours, since that is the bias this design exists to remove.
+			m.acceptTransit(tip, winBytes, &payout)
+		}
+		roundStart := time.Now()
+		attempts := m.mineParallel(tip.oid, succSlot, k, deadline, beat, onSolution)
+		hashrate = updateHashrate(hashrate, attempts, time.Since(roundStart))
+		m.hashrate.Store(int64(hashrate))
+		if submitted == 0 && !m.abort.Load() {
+			// The next round stamps the next slot: the longer gap eases K by a
+			// bit, which is what lets a target too hard for everyone be solved.
+			glb.Infof("   no solution for slot %d after %s attempts (%s H/s); re-stamping",
+				succSlot, util.Th(attempts), util.Th(uint64(hashrate)))
+		}
+	}
+	m.drain()
+}
+
+// settlementTime is the wall-clock moment the sequencers start settling the
+// slot's mine transits; a solution found later reaches none of them in time.
+func (m *miner) settlementTime(slot uint32) time.Time {
+	return m.consts.ClockTime(base.T(slot, m.consts.MineSettlementTick()))
+}
+
+// roundDeadline is when a round for the slot stops: mineSubmitMargin before its
+// settlement, so the last solution still reaches the sequencers in time.
+func (m *miner) roundDeadline(slot uint32) time.Time {
+	return m.settlementTime(slot).Add(-mineSubmitMargin)
+}
+
+// branchSuffix annotates the log line with how far ahead of the confirmed tip
+// this target is.
+func (m *miner) branchSuffix(tip *mineTip) string {
+	if !tip.speculative {
+		return ""
+	}
+	confirmed, _, _, _ := m.tree.stats()
+	return fmt.Sprintf(" (speculative, +%d)", tip.cc.TransitionCounter-confirmed)
+}
+
+// nowSlot is the current ledger slot derived from the local clock. Ledger time
+// is a pure function of wall-clock time and the genesis timestamp, so the miner
+// computes it locally instead of asking the node on every round.
+func (m *miner) nowSlot() uint32 {
+	return m.consts.LedgerTimeFromClockTime(time.Now()).Slot
+}
+
+// currentA is the reward a transit stamped in the current slot would mint. Used
+// for display; a transit under construction takes A from its own successor slot
+// instead.
+func (m *miner) currentA() uint64 {
+	return m.consts.MineAmountAtSlot(m.nowSlot())
+}
+
+// successorSlot stamps the next transit as early as mineLock allows — the
+// minimum pace above the predecessor — or the current slot if that is later.
+//
+// Stamping at the MINIMUM slot targets the highest difficulty: under the pace-
+// relieved K = max(B - (M - P), E) the earliest legal slot is the shortest gap
+// M = P, so K = B. It is also what lets the retarget work. The retarget compares
+// the single last gap to the target pace; stamping at the minimum makes that gap
+// a real measurement: it comes out short (harden) while the miner keeps up, and
+// stretches on its own (ease, lower K) once it cannot, because the wall clock
+// then sets the stamp. Stamping at the target instead would land every transit
+// on the hold branch and freeze the difficulty wherever it happened to be.
+//
+// Difficulty that tracks real hashrate is what keeps mining decided by work.
+// When solve time falls far below the pace every miner sits solved and waiting
+// for the earliest legal slot, and the winner is settled by network proximity
+// instead. See kb/archive/shipped/mining-bias.md.
+func (m *miner) successorSlot(predSlot uint32) uint32 {
+	succSlot := predSlot + uint32(m.consts.MineMinPace)
+	if succSlot < m.consts.DisableMiningUntilSlot {
+		succSlot = m.consts.DisableMiningUntilSlot
+	}
+	now := m.nowSlot()
+	if now > succSlot {
+		succSlot = now
+	}
+	// past the round deadline a transit for this slot reaches no sequencer in time
+	if succSlot == now && time.Now().After(m.roundDeadline(now)) {
+		succSlot = now + 1
+	}
+	return succSlot
+}
+
+// untilSlotOpens is the wall-clock time left until the given slot begins.
+func (m *miner) untilSlotOpens(slot uint32) time.Duration {
+	return time.Until(m.consts.ClockTime(base.T(slot, 0)))
+}
+
+// opensAt renders the wall-clock time of a slot's start, with the wait left.
+func (m *miner) opensAt(slot uint32) string {
+	t := m.consts.ClockTime(base.T(slot, 0))
+	return fmt.Sprintf("%s (%s, in %v)", t.UTC().Format(time.DateTime+" UTC"), t.Local().Format(time.DateTime+" MST"),
+		m.untilSlotOpens(slot).Round(time.Second))
+}
+
+// minerVersionCurrent re-reads the ledger's miner version before a round: the
+// constant can change at a slot while the miner runs, and from that slot every
+// transit this miner builds is invalid, so it stops with the reason instead of
+// grinding on. A node that cannot be read leaves the last answer standing.
+func (m *miner) minerVersionCurrent() bool {
+	consts, err := m.c.GetLedgerConstants(nil)
+	if err != nil {
+		glb.Verbosef("   cannot re-read the ledger constants: %v", err)
+		return true
+	}
+	if consts.MinerVersion == MinerVersion {
+		return true
+	}
+	glb.Infof("%s", minerVersionMismatch(consts.MinerVersion))
+	return false
+}
+
+// minerVersionMismatch is what the user reads when this miner is not the one
+// the ledger expects.
+func minerVersionMismatch(required uint32) string {
+	return fmt.Sprintf("the ledger requires miner version %d and this proxi mines with version %d: update proxi; a transit from this version is invalid", required, MinerVersion)
+}
+
+// awaitMiningOpen sleeps while the mine chain is still closed, waking up as
+// many slots before the start slot as a solved transaction may be stamped
+// ahead of the clock, so the first round targets the start slot itself.
+func (m *miner) awaitMiningOpen() {
+	until := m.consts.DisableMiningUntilSlot
+	if until <= mineMaxFutureSlots || m.nowSlot() >= until-mineMaxFutureSlots {
+		return
+	}
+	glb.Infof("mining opens at slot %d, %s: every node refuses an earlier transit, so there is nothing to gain by starting early. "+
+		"The miner waits and begins its first round %d slots before the opening; leave it running",
+		until, m.opensAt(until), mineMaxFutureSlots)
+	time.Sleep(m.untilSlotOpens(until - mineMaxFutureSlots))
+}
+
+// awaitStampWindow holds a solved transaction back until its slot is close
+// enough to the wall clock for the node to accept it. Returns false if the
+// target was superseded while waiting, in which case the transaction is
+// discarded unsubmitted.
+func (m *miner) awaitStampWindow(succSlot uint32) bool {
+	for {
+		if m.abort.Load() {
+			return false
+		}
+		now := m.nowSlot()
+		if succSlot <= now+mineMaxFutureSlots {
+			return true
+		}
+		glb.Verbosef("   holding solved tx: slot %d is %d slots ahead of the clock", succSlot, succSlot-now)
+		time.Sleep(m.consts.SlotDuration())
+	}
+}
+
+// submit posts the solved transaction, retrying transport and node-side submit
+// failures. A parse/validation rejection is deterministic — retrying it cannot
+// help — so it fails immediately and the caller falls back to the confirmed tip.
+// Uses the client directly rather than glb.SubmitAndDisplay because a retry loop
+// must not dump the failing transaction on every transient error.
+func (m *miner) submit(txBytes, consumedBytes []byte) bool {
+	// the extra nodes are a second path to the sequencers, not a fallback:
+	// one attempt each, in parallel, and their failures do not count
+	for _, c := range m.extraClients {
+		go func() {
+			if _, err := c.SubmitTransactionWithDetail(txBytes, client.WithConsumedUTXOs([][]byte{consumedBytes})); err != nil {
+				glb.Verbosef("   submit to an extra node failed: %v", err)
+			}
+		}()
+	}
+	_, err := retryCall("submit mine tx", 5, func() (base.TransactionID, error) {
+		txid, err := m.c.SubmitTransactionWithDetail(txBytes, client.WithConsumedUTXOs([][]byte{consumedBytes}))
+		if err != nil && isSubmitRejection(err) {
+			return txid, terminalError{err}
+		}
+		return txid, err
+	})
+	if err != nil {
+		glb.Infof("   submit failed: %v", err)
+		return false
+	}
+	return true
+}
+
+// extraSubmitClients are API clients for the --stream nodes other than the
+// wallet's own, which get every transit as well: from a slow link a transit
+// sent through one node alone often reaches the sequencers after settlement.
+func extraSubmitClients(extra []string) []*client.APIClient {
+	var ret []*client.APIClient
+	for _, e := range miningStreamEndpoints(false, extra) {
+		if e != glb.NodeAPIURL() {
+			ret = append(ret, glb.GetClient(e))
+		}
+	}
+	return ret
+}
+
+// releasePending verifies the transits parked on the root, after a re-root:
+// the stream runs ahead of the LRB, and a transit whose predecessor arrived
+// only by confirming would otherwise wait out its TTL.
+func (m *miner) releasePending() {
+	root := m.tree.rootTip()
+	for _, p := range m.tree.takePending(root.oid) {
+		m.acceptTransit(root, p.txBytes, nil)
+	}
+}
+
+// isSubmitRejection tells a deterministic validation rejection from a transient
+// failure. The submit endpoint reports the failing stage in the error text.
+func isSubmitRejection(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "stage=parse") || strings.Contains(s, "stage=full")
+}
+
+func (m *miner) minedCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.st.mined
+}
+
+// fetchConfirmedTip reads the mine chain tip from the LRB state, retrying until
+// the node answers.
+func (m *miner) fetchConfirmedTip() (*mineTip, error) {
+	return retryCall("fetch mine chain tip", 0, func() (*mineTip, error) {
+		oData, lrbid, err := m.c.GetChainOutputData(base.MineChainID)
+		if err != nil {
+			return nil, err
+		}
+		glb.Verbosef("   LRB %s", lrbid.StringShort())
+		return parseMineTip(m.lib, oData.ID, oData.Data, false)
+	})
+}
+
+// monitorConfirmations polls the LRB mine chain tip in the background, so the
+// mining loop never blocks on confirmation. The stream is the fast path for
+// learning about competing transits; this is the slow, authoritative one that
+// settles which branch actually won and prunes the rest.
+func (m *miner) monitorConfirmations(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(mineMonitorPeriod):
+		}
+		oData, _, err := m.c.GetChainOutputData(base.MineChainID)
+		if err != nil {
+			continue // transient: the next tick retries
+		}
+		tip, err := parseMineTip(m.lib, oData.ID, oData.Data, false)
+		if err != nil {
+			continue
+		}
+		stall := m.stallTimeout()
+		if m.onConfirmedTip(tip) == tipNoChange && m.tree.stalledFor(stall) {
+			// Nothing of ours has confirmed for a long time and no competitor
+			// has taken the height either, so we are not losing races — our
+			// submissions are not reaching the ledger. Drop the branch and
+			// rebuild from what is actually confirmed.
+			glb.Infof("   nothing confirmed for %v; discarding the speculative branch and re-anchoring",
+				stall.Round(time.Second))
+			m.excludeStalledTargets(tip.oid.Timestamp().Slot + stalledTargetSlots)
+			m.tree.setRoot(tip)
+			m.releasePending()
+			m.abort.Store(true)
+		}
+	}
+}
+
+// mineTipVerdict is what a confirmed tip means for this miner's branch.
+type mineTipVerdict int
+
+const (
+	tipNoChange      mineTipVerdict = iota // nothing this miner needs to react to
+	tipConfirmedOurs                       // own transit(s) confirmed; payouts are spendable
+	tipReanchor                            // the branch being extended is dead
+)
+
+// onConfirmedTip re-roots the tree on a confirmed tip and accounts for any
+// transits of ours that settled. What to do with the payouts is the treasury
+// loop's business, not this goroutine's.
+func (m *miner) onConfirmedTip(tip *mineTip) mineTipVerdict {
+	verdict, ownConfirmed := m.tree.onConfirmed(tip)
+
+	switch verdict {
+	case tipNoChange:
+		return verdict
+
+	case tipReanchor:
+		glb.Infof("   transit #%d confirmed as %s — none of ours; re-anchoring",
+			tip.cc.TransitionCounter, tip.oid.StringShort())
+
+	case tipConfirmedOurs:
+		m.mu.Lock()
+		m.st.transits += ownConfirmed
+		m.st.minted += m.consts.MineMintedAmount(tip.ml.O, tip.oid.Timestamp().Slot) * uint64(ownConfirmed)
+		m.mu.Unlock()
+
+		glb.Infof("   confirmed transit #%d %s (%d of ours)",
+			tip.cc.TransitionCounter, tip.oid.StringShort(), ownConfirmed)
+		m.printTotals()
+	}
+
+	m.releasePending()
+	// re-rooting may have dropped the branch the loop was extending
+	if m.tree.superseded() {
+		m.abort.Store(true)
+	}
+	return verdict
+}
+
+// drain gives the last submitted transits a chance to confirm before the run
+// ends, so the final totals are not misleadingly short.
+func (m *miner) drain() {
+	deadline := time.Now().Add(m.stallTimeout())
+	for time.Now().Before(deadline) {
+		if _, inFlight, _, _ := m.tree.stats(); inFlight == 0 {
+			break
+		}
+		time.Sleep(mineMonitorPeriod)
+	}
+	_, _, _, orphaned := m.tree.stats()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	glb.Infof("done: submitted %d transit(s), %d confirmed, %d orphaned in %s",
+		m.st.mined, m.st.transits, orphaned, time.Since(m.st.start).Round(time.Second))
+}
+
+// printTotals emits the run-wide totals line after a confirmed transit.
+func (m *miner) printTotals() {
+	_, inFlight, tracked, orphaned := m.tree.stats()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	up := time.Since(m.st.start)
+	avg := uint64(0)
+	if s := up.Seconds(); s > 0 {
+		avg = uint64(float64(m.st.attempts) / s)
+	}
+	glb.Infof("   totals: confirmed %d (+%d in flight, %d orphaned, %d tracked) | minted %s | K=%d | attempts %s | avg %s H/s | uptime %s",
+		m.st.transits, inFlight, orphaned, tracked, util.Th(m.st.minted), m.difficulty.Load(), util.Th(m.st.attempts), util.Th(avg), up.Round(time.Second))
+	if m.seekers != nil {
+		glb.Infof("   seekers: %s", m.seekers.summary())
+	}
+}
+
+// terminalError marks an error that retrying cannot fix.
+type terminalError struct{ error }
+
+// retryCall repeats f until it succeeds, backing off exponentially up to
+// mineRetryMax between tries. attempts <= 0 means retry indefinitely: the miner
+// is a long-running process that must ride out node restarts rather than abort
+// on the first communication failure. A terminalError stops the loop at once.
+func retryCall[T any](what string, attempts int, f func() (T, error)) (T, error) {
+	var (
+		zero    T
+		lastErr error
+	)
+	d := mineRetryBase
+	down := false
+	for i := 1; attempts <= 0 || i <= attempts; i++ {
+		v, err := f()
+		if err == nil {
+			if down {
+				glb.Infof("node is answering again")
+			}
+			return v, nil
+		}
+		var term terminalError
+		if errors.As(err, &term) {
+			return zero, term.error
+		}
+		lastErr = err
+		// a node that is not answering is an outage the operator should see,
+		// said once; every other failure is retry noise
+		if errors.Is(err, client.ErrNodeDown) && !down {
+			down = true
+			glb.Infof("%s: %v; the miner keeps trying until the node is back", what, err)
+		} else {
+			glb.Verbosef("   %s failed (attempt %d): %v; retrying in %v", what, i, err, d)
+		}
+		time.Sleep(d)
+		if d *= 2; d > mineRetryMax {
+			d = mineRetryMax
+		}
+	}
+	return zero, fmt.Errorf("%s: giving up after %d attempt(s): %w", what, attempts, lastErr)
+}
+
+// buildTransit assembles one valid mine transition against the given tip,
+// complete except for the lock unlock parameters (proof || nonce) and the
+// signature, which the winning attempt supplies. The successor (index 0) keeps
+// the balance, mints what the payout option takes as inflation, decrements R
+// by it, carries the retargeted B and C and declares the option; the reward
+// outputs after it are the option's layout, every beneficiary the signer, as
+// the mine lock requires.
+func (m *miner) buildTransit(tip *mineTip, succSlot uint32, succB, succC uint64, p minePayout) (*txbuildercore.TxBuilder, byte) {
+	succLockBin, err := m.lib.NewMineLock(tip.ml.R-p.minted, succB, succC, uint64(MinerVersion), p.option)
+	glb.AssertNoError(err)
+	succChainBin, err := m.lib.NewChainTransition(base.MineChainID, 0, tip.cc.OriginSlot,
+		tip.cc.CumulativeChainInflation+p.minted, 0, tip.cc.TransitionCounter+1, 0)
+	glb.AssertNoError(err)
+	sb := txbuildercore.NewOutputBuilder()
+	sb.PutConstraint(txbuildercore.EncodeAmounts(tip.balance, p.minted), txbuildercore.ConstraintIndexAmounts)
+	sb.PutConstraint(succLockBin, txbuildercore.ConstraintIndexLock)
+	sb.PutConstraint(succChainBin, txbuildercore.ConstraintIndexChain)
+
+	txb := txbuildercore.New(0)
+	predIdx := txb.ConsumeOutput(tip.data, tip.oid)
+	txb.ProduceOutput(sb.Output().Bytes())
+	switch p.option {
+	case txbuildercore.MinePayoutOpening:
+		out, err := txbuildercore.NewSigLockOutput(m.lib, p.minted-m.fee, m.holderID)
+		glb.AssertNoError(err)
+		txb.ProduceOutput(out.Bytes())
+		m.produceFee(txb, p.target)
+	case txbuildercore.MinePayoutDelegation:
+		out, err := m.lib.NewDelegationInitOutput(txbuildercore.DelegationInitOutputParams{
+			Amount: p.minted - m.fee, MasterID: m.holderID, Target: p.target, RequiredInflationCut: p.cut, StartSlot: succSlot,
+		})
+		glb.AssertNoError(err)
+		txb.ProduceOutput(out.Bytes())
+		m.produceFee(txb, p.target)
+	default:
+		var out *txbuildercore.Output
+		if p.topUp {
+			extra, err := m.lib.NewEnsureTopUpDelegationConstraint(p.delegationID)
+			glb.AssertNoError(err)
+			out, err = m.lib.NewSequencerRequestOutput(p.minted, p.target, m.holderID, txbuilder_seq.RequestCodeTopUpDelegation, nil, extra)
+			glb.AssertNoError(err)
+		} else {
+			out, err = txbuildercore.NewTagAlongOutput(m.lib, p.minted, p.target, m.holderID)
+			glb.AssertNoError(err)
+		}
+		txb.ProduceOutput(out.Bytes())
+	}
+	txb.PutUnlockParams(predIdx, txbuildercore.ConstraintIndexChain, txbuildercore.ChainUnlockParams(0))
+	txb.SetTimestamp(base.T(succSlot, 1))
+	txb.ComputeInputCommitment()
+	return txb, predIdx
+}
+
+// produceFee appends the inclusion fee of the opening and new-delegation
+// options, a tag-along to the sequencer that includes the transit.
+func (m *miner) produceFee(txb *txbuildercore.TxBuilder, target base.ChainID) {
+	out, err := txbuildercore.NewTagAlongOutput(m.lib, m.fee, target, m.holderID)
+	glb.AssertNoError(err)
+	txb.ProduceOutput(out.Bytes())
+}
+
+// mineWorker is one goroutine's view of a target: the shared prover and the
+// fixed part of the VRF message. attempt computes the VRF output for one nonce
+// and returns its trailing-zero-bit count plus what completes the proof.
+type mineWorker struct {
+	prover *vrf.Prover
+	pred   base.OutputID
+	slot   uint32
+}
+
+func (w *mineWorker) attempt(n uint64) (int, []byte, [txbuildercore.MineNonceLen]byte, *vrf.ProofState) {
+	var nonce [txbuildercore.MineNonceLen]byte
+	binary.BigEndian.PutUint64(nonce[:], n)
+	beta, st, err := w.prover.Output(txbuildercore.MineVRFMessage(w.pred, w.slot, nonce))
+	glb.AssertNoError(err)
+	return trailingZeroBits(beta), beta, nonce, st
+
+}
+
+// weight of a new measurement in the running hashrate estimate
+const hashrateEWMAWeight = 0.3
+
+// stallTimeout is how long the miner waits for a confirmation before presuming
+// the speculative branch lost. It must exceed the time to mine one transit at the
+// current difficulty (2^K / hashrate), or a legitimately slow high-K transit would
+// be abandoned mid-solve — the fixed-90s version deadlocked the chain when B
+// overshot. Scales as mineStallSolveFactor solve-times, floored at
+// mineConfirmationStall and capped at mineStallMax. K tracks the pace-relieved
+// difficulty, so as a slow chain's gap grows and its effective K drops the
+// timeout shrinks with it.
+func (m *miner) stallTimeout() time.Duration {
+	k := m.difficulty.Load()
+	h := float64(m.hashrate.Load())
+	if k <= 0 || h <= 0 {
+		return mineConfirmationStall
+	}
+	secs := mineStallSolveFactor * math.Ldexp(1, int(k)) / h
+	switch {
+	case secs <= mineConfirmationStall.Seconds():
+		return mineConfirmationStall
+	case secs >= mineStallMax.Seconds():
+		return mineStallMax
+	}
+	return time.Duration(secs * float64(time.Second))
+}
+
+// updateHashrate folds one round's measurement into the running estimate, so a
+// single lucky or unlucky round does not swing the window.
+func updateHashrate(prev float64, attempts uint64, elapsed time.Duration) float64 {
+	if attempts == 0 || elapsed <= 0 {
+		return prev
+	}
+	h := float64(attempts) / elapsed.Seconds()
+	if prev <= 0 {
+		return h
+	}
+	return (1-hashrateEWMAWeight)*prev + hashrateEWMAWeight*h
+}
+
+// mineSolution is a solution of a round, from a local worker or a seeker: the
+// completed proof, its nonce and the VRF output it proves.
+type mineSolution struct {
+	proof []byte
+	nonce [txbuildercore.MineNonceLen]byte
+	beta  []byte
+}
+
+// mineParallel runs the configured workers and the seekers against one target
+// until the deadline or an abort, and hands every solution whose VRF output
+// reaches targetK trailing zero bits and is below beat() to onSolution, which
+// runs on the calling goroutine. beat is re-read as the search goes, so a
+// better transit seen meanwhile, own or not, raises the bar for the workers and
+// the seekers alike; nil means any solution will do. One seeker job serves the
+// whole round. Prints a live attempts/hashrate line and returns the attempt
+// total, which it also folds into the stats.
+func (m *miner) mineParallel(pred base.OutputID, succSlot uint32, targetK int, deadline time.Time, beat func() []byte, onSolution func(mineSolution)) uint64 {
+	var att uint64
+	start := time.Now()
+	stop := func() bool { return m.abort.Load() || time.Now().After(deadline) }
+
+	var seekerResults <-chan mineSolution
+	seekerAttempts := func() uint64 { return 0 }
+	if m.seekers != nil {
+		seekerResults = m.seekers.publish(pred, succSlot, targetK, beat(), deadline)
+		defer m.seekers.retire()
+		seekerAttempts = m.seekers.pendingAttempts
+	}
+
+	// live progress ticker: reads the shared attempt counter every 2s.
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				n := atomic.LoadUint64(&att) + seekerAttempts()
+				el := time.Since(start).Seconds()
+				hs := uint64(0)
+				if el > 0 {
+					hs = uint64(float64(n) / el)
+				}
+				fmt.Printf("\r   mining... %s attempts  %s H/s  %.0fs   ", util.Th(n), util.Th(hs), el)
+			}
+		}
+	}()
+
+	// Workers step through disjoint nonce residues from a common start. A random
+	// start per round keeps separate processes mining under the same key from
+	// retrying each other's nonces: the VRF output is fixed by key, predecessor,
+	// slot and nonce, so the same nonce is the same attempt wherever it runs.
+	base := m.nonceStart
+	if base == 0 {
+		base = mathrand.Uint64()
+	}
+	// Under a hashrate cap every worker is paced against its own share of it,
+	// at the point where it checks the stop conditions anyway. The batch between
+	// two checks is then sized to ~100ms of capped work, so that a worker never
+	// sleeps long and keeps reacting to an abort.
+	perWorker := 0.0
+	if m.workers > 0 {
+		perWorker = m.maxHashrate / float64(m.workers)
+	}
+	batch := uint64(1024)
+	if perWorker > 0 {
+		batch = min(batch, max(1, uint64(perWorker/10)))
+	}
+	// improvements are rare, a handful per round; one that finds the buffer
+	// full is dropped, a better one follows or the round is over
+	found := make(chan mineSolution, 16)
+	var wg sync.WaitGroup
+	for w := 0; w < m.workers; w++ {
+		wg.Add(1)
+		go func(seed uint64) {
+			defer wg.Done()
+			mw := &mineWorker{prover: m.prover, pred: pred, slot: succSlot}
+			n := seed
+			bar := beat()
+			var local, flushed uint64
+			for {
+				if local%batch == 0 {
+					atomic.AddUint64(&att, local-flushed) // publish progress for the ticker
+					flushed = local
+					if stop() {
+						break
+					}
+					if b := beat(); b != nil && (bar == nil || bytes.Compare(b, bar) < 0) {
+						bar = b
+					}
+					if perWorker > 0 {
+						// wait for the moment this many attempts are due, never past the deadline
+						due := start.Add(time.Duration(float64(local) / perWorker * float64(time.Second)))
+						time.Sleep(min(time.Until(due), time.Until(deadline)))
+					}
+				}
+				n += uint64(m.workers) // disjoint nonce spaces per worker
+				tz, beta, nc, st := mw.attempt(n)
+				local++
+				if tz >= targetK && (bar == nil || bytes.Compare(beta, bar) < 0) {
+					pi, err := m.prover.ProofFor(st)
+					glb.AssertNoError(err)
+					bar = beta
+					select {
+					case found <- mineSolution{proof: pi, nonce: nc, beta: beta}:
+					default:
+					}
+				}
+			}
+			atomic.AddUint64(&att, local-flushed)
+		}(base + uint64(w))
+	}
+
+	// Solutions are handled here, one at a time, each against the bar as it
+	// stands now: a competitor's or another worker's may have passed it since.
+	handle := func(sol mineSolution) {
+		if b := beat(); b != nil && bytes.Compare(sol.beta, b) >= 0 {
+			return
+		}
+		onSolution(sol)
+		if m.seekers != nil {
+			m.seekers.tighten(beat())
+		}
+	}
+	t := time.NewTicker(seekerWaitTick)
+	for !stop() {
+		select {
+		case sol := <-found:
+			handle(sol)
+		case sol := <-seekerResults:
+			handle(sol)
+		case <-t.C:
+			if m.seekers != nil {
+				m.seekers.tighten(beat())
+			}
+		}
+	}
+	t.Stop()
+	wg.Wait()
+	close(done)
+	fmt.Printf("\r%70s\r", "") // clear the progress line
+
+	total := atomic.LoadUint64(&att)
+	if m.seekers != nil {
+		total += m.seekers.takeAttempts()
+	}
+	m.mu.Lock()
+	m.st.attempts += total
+	m.mu.Unlock()
+	return total
+}
+
+// trailingZeroBits counts zero bits at the least-significant end of the VRF
+// output — the same suffix-hashcash definition the mineLock PoW check enforces.
+func trailingZeroBits(h []byte) int {
+	n := 0
+	for i := len(h) - 1; i >= 0; i-- {
+		if h[i] == 0 {
+			n += 8
+			continue
+		}
+		return n + bits.TrailingZeros8(h[i])
+	}
+	return n
+}

@@ -1,0 +1,112 @@
+# Peering configuration
+peering:
+  # libp2p host data:
+  host:
+    # host ID private key
+    id_private_key: eb9132a44625fd29c56af8653d8b20ef1dc19cbd2d6aff0fbeae1f24ed624a88f3d797758dbf1800821c675370db2b0160bed9778332f2bcd155952fb0917799
+    # host ID is derived from the host ID public key.
+    id: 12D3KooWSEDuiViLCgy6RvzQWeziKk79aAMikGPFnMKjnLzv9TVi
+    # port to connect from other peers
+    port: 4000
+
+  # YAML dictionary (map) of statically pre-configured peers. Also used in the peering boostrap phase by Kademlia DHT
+  # It will be empty for the first bootstrap node in the network.
+  # Must be at least 1 static peer for a non-bootstrap node
+  # Each static peer is specified as a pair <name>: <multiaddr>, where:
+  # -- <name> is unique mnemonic name used for convenience locally
+  # -- <multiaddr> is the libp2p multi-address in the form '/ip4/<IPaddr ir URL>/<port>/tcp/p2p/<hostID>'
+  # for more info see https://docs.libp2p.io/concepts/fundamentals/addressing/
+  peers:
+    # Example -> boot: /ip4/127.0.0.1/tcp/4000/p2p/12D3KooWL32QkXc8ZuraMJkLaoZjRXBkJVjRz7sxGWYwmzBFig3M
+
+  # Maximum number of peers which may be connected to via the automatic peer discovery
+  # max_dynamic_peers > 0 means automatic peer discovery (autopeering) is enabled, otherwise disabled
+  max_dynamic_peers: 4
+
+  # defines if local IPs are allowed to be used for autopeering.
+  allow_local_ips: true
+
+# Node's API config
+api:
+    # server port
+  port: 8000
+  # enable vid streaming
+  dag_streaming:
+    enable: true
+
+
+# logger config
+# logger.previous can be 'erase' or 'save'
+logger:
+  output: proxima.log
+  # options: 'erase' (previous will be erased), 'save' (previous will be saved and then deleted)
+  # Otherwise or when absent: log will be appended in the same existing file
+  previous: erase
+
+# Other parameters used for tracing and debugging
+# Prometheus metrics exposure
+metrics:
+  # expose Prometheus metrics yes/no
+  enable: false
+  port: 14000
+
+# list of enabled trace tags.
+# When enabled, it forces tracing of the specified module.
+# It may be very verbose
+# Search for available trace tags the code for "TraceTag"
+trace_tags:
+#  - autopeering
+#  - inclusion
+#  - backlog
+#  - gossip
+#  - pull_server
+#  - txinput
+#  - txStore
+#  - global
+#  - backlog
+#  - propose-base
+#  - pruner
+
+
+# map of maps of sequencer configuration <local seq name>: <seq config>
+# <local seq name> is stored into each sequencer transaction, so better keep it short 
+# usually none or 1 sequencer is enabled for the node
+# 0 enabled sequencers means node is a pure access node
+# If sequencer is enabled, it is working as a separate and independent process inside the node
+sequencer:
+    name: "boot"
+    # start sequencer yes/no
+    enable: true
+    # chain ID of the sequencer
+    # chain ID 8739faa34a6902e49bc16455bbd642fd3c649e8959d97089e43f214ca57ea0e5 is
+    # predefined chain ID of the genesis chain (the bootstrap sequencer)
+    # Sequencer chain is created by 'proxi node mkchain' command
+    # All chains controlled by the wallet can be displayed by 'proxi node chains'
+    chain_id: 50726f78696d612e626f6f7473747261702e636861696e2e
+    # sequencer chain controller's private key (hex-encoded)
+    controller_key_file: proxima.key
+    # sequencer pace. Distance in ticks between two subsequent sequencer transactions
+    # cannot be less than the sequencer pace value set by the ledger
+    pace: 12
+    # maximum tag-along inputs per milestone (default: 15). Controls batch size.
+    max_tag_along_inputs: 15
+    # target tag-alongs to drain per slot (default: 100, ~10 TPS per sequencer).
+    # Together with max_tag_along_inputs, controls how many drain milestones per slot.
+    tag_along_drain_rate: 100
+    # write separate sequencer log (default: false)
+    logging: false
+    # if logging = true, duplicate sequencer log messages to the node's log (default: false)
+    global_logging: false
+    # force_activity: always issue branch + milestone regardless of throttle pressure.
+    # Use for bootstrap sequencers that must keep producing to maintain network liveness.
+    # force_activity: false
+    # disable_throttle: disable tag-along budget throttling entirely.
+    # Budget always stays at full (2/3 of consensus). For debugging.
+    # disable_throttle: false
+    # standalone: bypass the libp2p connectivity check before submitting milestones.
+    # Use ONLY for single-node dev networks (no peers by design). NEVER enable on a
+    # networked sequencer: it would allow building one-sided forks during a partition.
+    # standalone: false
+
+    do_not_wait_for_sync_at_start: true
+

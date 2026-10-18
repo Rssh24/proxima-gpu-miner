@@ -1,0 +1,89 @@
+package node_cmd
+
+import (
+	"github.com/lunfardo314/proxima/proxi/glb"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/chess_cmd"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/consolidate"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/delegate"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/foundry"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/mine"
+	"github.com/lunfardo314/proxima/proxi/node_cmd/seq_cmd"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+func Init() *cobra.Command {
+	nodeCmd := &cobra.Command{
+		Use:   "node [<subcommand>]",
+		Short: "specifies node API subcommand",
+		Args:  cobra.NoArgs,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			glb.ReadInConfig()
+			glb.BindNodeAPIFlags(cmd)
+		},
+	}
+
+	// 'config' / '-c' is a persistent flag on the root command (see proxi/main.go),
+	// inherited here; do not re-bind it per subcommand.
+
+	nodeCmd.PersistentFlags().String("private_key", "", "ED25519 private key (hex encoded)")
+	err := viper.BindPFlag("private_key", nodeCmd.PersistentFlags().Lookup("private_key"))
+	glb.AssertNoError(err)
+
+	nodeCmd.PersistentFlags().String("api.node_url", "", "URL of the node API, e.g. http://127.0.0.1:8000")
+	err = viper.BindPFlag("api.node_url", nodeCmd.PersistentFlags().Lookup("api.node_url"))
+	glb.AssertNoError(err)
+
+	nodeCmd.PersistentFlags().String("api.endpoint", "", "legacy name of --api.node_url")
+	glb.AssertNoError(nodeCmd.PersistentFlags().MarkHidden("api.endpoint"))
+	err = viper.BindPFlag("api.endpoint", nodeCmd.PersistentFlags().Lookup("api.endpoint"))
+	glb.AssertNoError(err)
+
+	nodeCmd.PersistentFlags().BoolP("nowait", "n", false, "do not wait for inclusion")
+	err = viper.BindPFlag("nowait", nodeCmd.PersistentFlags().Lookup("nowait"))
+	glb.AssertNoError(err)
+
+	nodeCmd.PersistentFlags().BoolVarP(&glb.UseAlternativeTagAlongSequencer, "tag_along.alt", "a", false, "use alternative tag-along sequencer")
+	err = viper.BindPFlag("tag_along.alt", nodeCmd.PersistentFlags().Lookup("tag_along.alt"))
+	glb.AssertNoError(err)
+
+	nodeCmd.PersistentFlags().IntVarP(&glb.TargetInclusionDepth, "depth", "d", 1, "target inclusion depth")
+	err = viper.BindPFlag("depth", nodeCmd.PersistentFlags().Lookup("depth"))
+	glb.AssertNoError(err)
+
+	nodeCmd.InitDefaultHelpCmd()
+	nodeCmd.AddCommand(
+		initGetOutputsCmd(),
+		initGetChainOutputCmd(),
+		initCompactOutputsCmd(),
+		initUTXOCleanupCmd(),
+		initBalanceCmd(),
+		initSendCmd(),
+		initSendToWalletCmd(),
+		initSendToChainCmd(),
+		initMakeChainCmd(),
+		initKillChainCmd(),
+		initNodeInfoCmd(),
+		seq_cmd.Init(),
+		initSyncInfoCmd(),
+		initPeersInfoCmd(),
+		initReliableBranchCmd(),
+		initLastSeqCmd(),
+		initSeqRatingCmd(),
+		delegate.Init(),
+		initAllChainsCmd(),
+		initNodeGetLedgerIDCmd(),
+		initChainCmd(),
+		initGetInactiveCmd(),
+		initHoldersCmd(),
+		initTxLogCmd(),
+		initTxCmd(),
+		initGetSnapshotCmd(),
+		initFundCmd(),
+		mine.InitMineCmd(),
+		consolidate.Init(),
+		chess_cmd.Init(),
+		foundry.Init(),
+	)
+	return nodeCmd
+}

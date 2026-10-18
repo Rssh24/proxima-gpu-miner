@@ -1,0 +1,431 @@
+# The wallet consolidator — permanent wallet consolidation
+
+> **LIVE** — approved 2026-09-15, built; the delegation mode (§2.4b) was
+> redesigned 2026-09-19 into a market mode driven by a target number and a
+> target size of delegations, price-taking on the sequencer's cut, and tidying
+> the existing set. The miner's treasury loop and the
+> `proxi node compact auto` stub were retired on `develop-take1` on 2026-09-22.
+> **2026-10-10: the engine is the repo-level package `consolidator`**, run
+> inside whatever process holds the key: `proxi node consolidate` runs it.
+> **Since 2026-10-11 `proxi node mine` no longer embeds it**: the mine covenant
+> prices the reward's layout and the miner places every reward itself
+> (`kb/mine_payout_options.md`). For a miner the consolidator is optional,
+> tidying only: re-delegating, folding, sweeping plain outputs (§5).
+
+Date: 2026-09-15
+
+---
+
+## 1. Why
+
+People run independently written miners against the mine chain. Those miners
+do what the ledger requires and nothing more: every confirmed transit leaves a
+payout on a plain sigLock output, and the miner never touches it again. The
+result is a growing pile of sigLock UTXOs that sit outside consensus. Tokens on
+a sigLock output are neither delegated nor held by a sequencer, so they add
+nothing to ledger coverage, and every one of those outputs is permanent state
+the whole network carries. Ledger health drops as mining succeeds.
+
+`proxi node mine` used to handle this for its own payouts with a treasury
+loop, which helped only people who mined with `proxi`. The job belongs to the
+wallet, not to the miner: a permanent, key-holding process that watches the account
+and periodically sweeps what has accumulated, either back into consensus
+(sequencer or delegation) or at least into one output. That process is
+`proxi node consolidate`. It works for any wallet, whatever put the UTXOs
+there. (Written when the documentation told every miner to run it; since the
+mine payout options it no longer does, see §5.)
+
+## 2. What it does
+
+A long-running command on the wallet profile. Every tick it reads the
+account, decides whether there is enough to act on, builds at most one
+transaction, submits it and logs what it did. It never waits for inclusion: the
+next tick sees the result in the account.
+
+### 2.1 Consolidatable outputs
+
+Two kinds, and only these two:
+
+- plain **sigLock** outputs of the wallet;
+- **tag-along outputs the wallet sent** whose target sequencer never took
+  them, once the tag-along window (`tag_along_slots`) has passed, so the
+  wallet can reclaim them. Sequencer requests (askstop, withdraw, set-params)
+  are tag-alongs with a payload and are swept the same way from the end of
+  the tag-along window: the `ensureStopDelegation` an askstop carries binds
+  only while the target can consume the output. A tag-along nobody reclaims
+  is anybody's after `tag_along_reclaim_slots`, about an hour, so the sweep
+  is what keeps the wallet's own requests from being taken by a stranger; it
+  presumes the process is running.
+
+Both are classified with the wallet library's spendable classifier at the
+current slot, exactly as `proxi node compact` does. `sendWithDeadline` outputs
+are deliberately left out: reclaiming or accepting them is a one-off decision
+that stays with `proxi node compact`. Outputs of unrecognized structure are
+never consumed.
+
+### 2.2 When it acts
+
+Four numbers from the profile: the **threshold** `H` above which the account
+is worth acting on (default 300 PROX), the **minimum balance** `M` the wallet
+keeps on sigLock outputs (default 100 PROX), the **input cap** `N` (default
+30) and the **compaction threshold** `P` (default 10 outputs). The threshold
+is sized for the take 1 mine payouts, 94 PROX each: it fires every three or
+four of them, and `H - M` is then at least the 90 PROX a top-up request of a
+frozen delegation must carry; a profile that sets `H - M` under that is warned
+at startup that frozen delegations will never be topped up.
+
+Let `T` be the total of every consolidatable output and `n` their number. The
+process acts when either
+
+    T > H and n >= 2   (enough has accumulated, and it is scattered), or
+    n >= P             (a pile of outputs is worth folding whatever it holds)
+
+and otherwise does nothing this tick. A single output above the threshold is
+not scattered and is left alone. When only the second condition holds the
+transaction is a plain compaction, never a transfer or a delegation: nothing
+has accumulated to move, and small-output piles are exactly the problem this
+command exists for.
+
+### 2.3 What it consumes
+
+Up to `N` consolidatable outputs, **smallest balance first**. Small outputs
+are the ones worth removing: each costs the network the same to carry whatever
+it holds. Whatever does not fit is picked up by a later tick.
+
+Let `C` be the total of the consumed set. The wallet keeps
+
+    kept = max(0, M - (T - C))
+
+as a single sigLock output: the minimum is a property of the whole account,
+so outputs left unconsumed count toward it. Everything else in the consumed set
+is what moves:
+
+    moved = C - kept - fee
+
+Below the threshold `moved` is zero: the whole consumed set is kept. `fee`
+is the tag-along fee of the transaction, resolved as everywhere in proxi: the
+larger of the profile `tag_along.fee` and the minimum declared by the
+sequencer that receives the fee. If `moved` is not positive the transaction is
+a plain compaction (§2.4c).
+
+The tag-along target and its fee are resolved **before every transaction**,
+never once at startup: the process outlives a sequencer's activity and a fee
+setting, and a transaction built on stale values is never picked up. A
+`random` target is drawn among the sequencers active now by the tag-along
+rating (`kb/sequencer_rating.md`: minimum fee, balance, transit count, transit rate); a configured one
+must be active now, else the tick is deferred (logged once until it is usable
+again).
+
+A `kept` output can come out tiny when `T - C` is just under `M`, below the
+storage deposit the ledger requires of a sigLock output (about 9.25 PROX;
+read from the node at startup, and `minimum_balance_prox` must be at least
+that). Rather than fail, a remainder under that floor is folded into `moved`:
+the wallet is then briefly a little under its minimum, which the next incoming
+output restores. Symmetrically, a `moved` amount under one PROX (a few dust
+outputs consumed while the rest of the account covers the minimum) is not
+worth sending or delegating and stays in the wallet, so the transaction is a
+plain compaction; if that compaction could not itself reach the floor, nothing
+is built until more has piled up. Every sigLock output the process produces is
+checked against the floor at build time, so a transaction the ledger would
+refuse is never submitted, and never rebuilt and refused again each tick.
+
+Both triggers require at least two outputs and the input cap is at least two,
+so every transaction consumes at least two outputs: an account already
+consolidated costs nothing per tick.
+
+### 2.4 Where the moved tokens go
+
+Decided from the `consolidate` section of the profile. Sending, when
+configured, takes precedence over delegating. A mode that is configured but
+cannot be applied this tick is logged, and the outputs are compacted instead
+(c): a configured transfer never silently turns into a delegation.
+
+**(a) Send to a sequencer** — `send_to_sequencer` is `own` or a sequencer ID.
+
+- `own` means `wallet.sequencer_id`. Before every transaction the process
+  reads that chain's output and checks that its lock is a plain sigLock whose
+  holder is this wallet: the same read `proxi node seq info` shows as
+  "controller lock". A sequencer the wallet does not control is refused with
+  an error, and the tick compacts instead. The check is repeated every time
+  because control can change hands while the process runs. An unset
+  `wallet.sequencer_id` disables the mode with a warning at startup.
+- a sequencer ID means any sequencer. It is checked once, at startup, to
+  exist on the ledger and to be a sequencer chain, like the tag-along target.
+- empty or unparsable disables the mode. An unparsable value is reported at
+  startup so a typo does not silently turn sending off.
+
+The target must be **active**: its sequencer output in the LRB state is at
+most 5 slots older than the LRB (`kb/sequencer_rating.md`; the same rule
+every picker in `proxi` uses). An inactive target means the tokens would sit
+unclaimed in a tag-along output; the process logs it and falls through.
+
+The transfer is a **tag-along output** to the target carrying `moved`, with
+the wallet as sender, which is how proxi always pays a chain (`chainLock` is
+never produced: the wallet can reclaim a tag-along the sequencer does not
+take). That output is also the sequencer's fee, so no separate fee output is
+built and `fee` in §2.3 is the target's minimum, which `moved` clears by
+construction. Outputs: the tag-along, then the `kept` sigLock if non-zero.
+
+**(b) Delegate** — `send_to_sequencer` is off and `autodelegate` is `random`
+(the default since 2026-10-06, so that a wallet that only mines still puts its
+payouts to work) or a sequencer ID; `none` only compacts. Redesigned 2026-09-19 as a market mode; the earlier
+"miner's algorithm, moved here" is gone.
+
+Two numbers drive the delegation set: `target_delegations` (default 5) and
+`target_delegation_prox` (default 10,000 PROX). Delegations grow to the target
+size one at a time, then their number grows to the target, then the existing
+ones are topped up. Placing `D`:
+
+1. a delegation below the target size → add `D` to the smallest such one;
+2. otherwise, fewer delegations than the target → create a new one of `D`;
+3. otherwise → add `D` to the smallest one.
+
+Since 2026-10-05 that is an order of attempts, not a single pick: a placement
+that cannot be made this tick (the target of a frozen delegation inactive, `D`
+under its minimum top-up, its pinned share above what the target now leaves,
+`D` under the minimum inflatable amount) falls through to the next one in the
+order, the delegations below the size smallest first, then a new one, then
+the rest smallest first. A delegation is frozen for most of an epoch, so
+waiting on the one the rule picks would leave the payouts idle for up to an
+epoch.
+
+How `D` is added depends on who can spend the delegation in this slot. One
+the master can consume (on hold, never frozen, or inside its safe revocation
+window) is topped up and re-delegated by the wallet itself, for the tag-along
+fee. A frozen one is topped up through its target with a **top-up request**
+(`kb/delegation_topup.md`): a tag-along to the target carrying the whole `D`
+and an `ensureTopUpDelegation`, which the target adds to the delegation in
+place, frozen span and share unchanged, prepaying the advance on it. No fee;
+the target's minimum top-up (90 PROX floor, `min_topup` in its data) applies,
+and a smaller `D` waits. The request is the transaction's only tag-along, so
+a refused request leaves the inputs unspent and the next tick plans again.
+Askstop is no longer part of placing tokens.
+
+**Price taker.** A delegation requires exactly the cut its target leaves
+(1000 minus the sequencer's own cut), read off the sequencer's output when the
+transaction is built. `delegate.minimum_cut` is not read. With `random` the
+target is drawn among the sequencers active now (§2.4a) that leave anything,
+**by the delegation rating** of `kb/sequencer_rating.md`: rank sum over the
+share left, the balance, the frozen-to-balance ratio, the transit count and
+the transit rate, the best drawn most
+often and nobody eligible left out, so a sequencer keeping more gets fewer
+delegations rather than none. With a sequencer ID the target is that
+sequencer, which must be active and leave something, or the action is
+deferred with a log line.
+
+**Tidying.** Every tick opens by tidying the consumable delegations, one
+action per tick and before anything is swept, so a wallet that always has
+something to sweep cannot starve it; the tag-along fee is taken out of the
+delegation itself:
+
+- more delegations than the target → the smallest consumable one is folded
+  into the largest consumable one, which is re-delegated with the combined
+  balance; the smaller chain ends;
+- otherwise, a consumable delegation that is stale is re-delegated as it is:
+  its target is not active, or leaves less than the delegation requires (the
+  sequencer refuses it as loss-making), or is not the configured one, or the
+  delegation has sat unfrozen for longer than an epoch.
+
+This is what brings a delegation set built under other rules — by the earlier
+version, by `proxi node mine`, at another cut, on a sequencer that has since
+raised its cut — into line without anybody touching it. A stale delegation
+whose balance less the fee would fall under the minimum inflatable amount
+cannot be re-delegated as it is; since 2026-10-05 it is folded into the
+largest other consumable delegation, or, when there is none, its chain is
+ended and the balance less the fee returns to the wallet as one sigLock
+output, which the sweep picks up with everything else. Left alone it would
+sit idle for good. A fold is never deferred, since the result is larger.
+
+A new delegation of `D` below the minimum inflatable amount is not created;
+the tick falls through to plain compaction and `D` accumulates. The
+delegation output, the tag-along fee output (to the profile's tag-along
+sequencer) and the `kept` sigLock are the outputs; the change convention of
+the miner (one sigLock, nothing when zero) is kept. A transaction that
+consumed delegations is tracked in flight (§2.5) through the delegation
+outputs it consumed.
+
+**(c) Compact** — neither mode applies, or `moved` is not positive.
+
+One sigLock output back to the wallet holding `C - fee`, plus the tag-along
+fee output. This is `proxi node compact` without the prompt and without the
+inclusion wait; it shares `MakeCompactTransaction`.
+
+### 2.5 In flight
+
+Consumed outputs stay in the node's account snapshot until the transaction
+settles, so the process remembers the IDs it consumed and stands still while
+any of them is still reported. If they are still there after 3 minutes the
+transaction is presumed dropped and the next tick rebuilds from a fresh
+snapshot. Same rule as the miner's treasury; one transaction in flight at a
+time, which is what keeps the process from double-spending its own inputs.
+
+### 2.6 Timing
+
+Tick every 10 seconds. The transaction is stamped at the current slot and
+pushed past the newest consumed input by the transaction pace, as
+`MakeCompactTransaction` already does; the per-sender pace gate drops
+transactions stamped too close together silently, and one transaction per
+tick with a 10 second tick keeps clear of it.
+
+Every node call is retried with exponential backoff, as in the miner: a
+wallet process must ride out node restarts and API timeouts. A deterministic rejection of a built transaction is not
+retried; it is logged with the transaction shown and the tick ends.
+
+## 3. Configuration
+
+New profile section, all keys optional, with a flag overriding each:
+
+```yaml
+consolidate:
+    # act once the consolidatable balance exceeds this, in PROX
+    threshold_prox: 300
+    # balance always kept in the wallet on plain sigLock outputs, in PROX
+    minimum_balance_prox: 100
+    # most outputs one consolidating transaction consumes
+    max_inputs: 30
+    # compact whenever this many consolidatable outputs have piled up, even
+    # below the threshold
+    compact_at: 10
+    # 'own' sends everything above the minimum to wallet.sequencer_id, which
+    # must be controlled by this wallet; a sequencer ID sends it to that
+    # sequencer; empty leaves the tokens in the wallet (see autodelegate)
+    send_to_sequencer: own
+    # applies only when send_to_sequencer is empty: 'random' (the default)
+    # delegates to a sequencer drawn at random among the active ones on every
+    # action, a sequencer ID always delegates to that one, 'none' only compacts
+    autodelegate: random
+    # number of own delegations to build up to; beyond it existing ones are
+    # topped up, and extra ones are folded together
+    target_delegations: 5
+    # size a delegation is grown to before the next one is created, in PROX
+    target_delegation_prox: 10000
+    # how often the process reports the account while no action is taken
+    status_period: 5m
+```
+
+| Key | Flag | Default | Notes |
+|-----|------|---------|-------|
+| `consolidate.threshold_prox` | `--threshold-prox` | 300 | PROX. The balance trigger of §2.2; must be at least the minimum, and at least the minimum plus the ledger's minimum top-up for frozen delegations to be topped up. |
+| `consolidate.minimum_balance_prox` | `--minimum-balance-prox` | 100 | PROX, not motes, and the name says so: this is a user-facing floor, and every other proxi amount is in motes. |
+| `consolidate.max_inputs` | `--max-inputs` | 30 | 2..256. |
+| `consolidate.compact_at` | `--compact-at` | 10 | The second trigger of §2.2. |
+| `consolidate.send_to_sequencer` | `--send-to-sequencer` | empty | `own`, a sequencer ID, or empty. |
+| `consolidate.autodelegate` | `--autodelegate` | `random` | `random`, a sequencer ID, or `none`. Empty reads as `random`. |
+| `consolidate.target_delegations` | `--target-delegations` | 5 | `max_delegations` / `--max-delegations`, the earlier name, is read when this one is not set. |
+| `consolidate.target_delegation_prox` | `--target-delegation-prox` | 10000 | PROX. |
+| `consolidate.status_period` | `--status-period` | 5m | Go duration. A tick that takes no action logs the output and delegation counts and the trigger rule this often; 0 disables. Every message of the loop carries the local time. |
+
+Also read, not new: `wallet.sequencer_id` (for `own`), `tag_along.*` (fee and
+fee target). `delegate.minimum_cut` is not read: the wallet is a price taker.
+
+The wallet profile template gains the section, commented, with
+`send_to_sequencer` left empty (the template cannot know whether the wallet
+controls a sequencer) and `autodelegate: random`: since 2026-10-06 delegation
+is the default, because most miners never choose a target and their payouts
+sat diluted; `none` is the explicit opt-out.
+
+## 4. Output to the user
+
+Every line goes to the `io.Writer` the host passes in `Environment.Log`, one
+write per line, so the host decides where it shows: `proxi node consolidate`
+writes to stdout, the miner wraps stdout in a line-prefixing writer so the
+consolidator's lines come out as `[consolidate] ...` between its own. At
+startup, a banner with the effective configuration: account, minimum, input
+cap, the mode in force and its target, and the tag-along sequencer and fee.
+Then one line per event:
+
+- an action: what was consumed (count, total), what moved and where, what was
+  kept, the transaction ID, and that it is submitted and not awaited;
+- an action deferred: which mode was skipped and why (target inactive, target
+  not controlled by the wallet, amount below the minimum inflatable, no
+  sequencer leaves the required cut, in flight);
+- a failure: the node error, and that the tick will retry;
+- a settled or timed-out transaction.
+
+A quiet tick prints nothing. `-v` adds the per-output classification and the
+retry chatter.
+
+## 5. `proxi node mine`, and the miner in general
+
+The consolidator assumes nothing about the miner: it only ever sees the
+account, so it serves a miner written by anyone. The miner can be a separate
+process beside `proxi node consolidate`, or it can run the engine itself.
+
+**Out of the miner again, 2026-10-11.** `proxi node mine` no longer runs the
+engine: the mine covenant now prices what the reward lands as, and the miner
+chooses the layout per round by profit with this document's placement rules
+and the `consolidate` section's `target_delegations`, `target_delegation_prox`
+and `send_to_sequencer` (`kb/mine_payout_options.md`). `SelectDelegationTarget`
+is what it shares with the engine. `proxi node consolidate` stays for every
+other wallet and for a miner's wallet that wants folding and re-delegation. The
+paragraph below describes the embedded form as it was for one day.
+
+**What the docs site tells miners, since 2026-10-17.** Stick to
+`proxi node mine` and make it faster with an external nonce seeker
+(`kb/external_nonce_seeker.md`): all the speed is in the nonce search, while
+the rest of the miner costs next to nothing and is what keeps mined tokens in
+consensus. A miner of one's own remains allowed, but one that does not place
+its rewards earns less per transit and leaves them idle. The consolidator is
+presented as optional, for tidying. The framing is the common Proxima pattern:
+software acting on behalf of a token holder, maximizing the holder's profit,
+which the ledger's rules make the same as serving the cooperative consensus.
+
+**Inside the miner, 2026-10-10.** The engine lives in the repo-level package
+`consolidator` (`consolidator.go` the loop, `delegate.go` the delegation
+mode): `New(Config, Environment)` checks the configuration, reads the storage
+floor and resolves any pinned target, and `Run(ctx)` loops until the context
+ends. `Config` carries every setting in motes, `Environment` the API client,
+library, constants, key and the writer the lines go to; nothing in the
+package reads a profile, a flag or the ledger singleton, so a wallet of any
+kind can embed it. `proxi/node_cmd/consolidate` is the thin command: it
+resolves the profile section and the flags into a `Config` (`ReadConfig`,
+flags optional) and runs the engine on stdout. `proxi node mine` reads the
+same section with no flags and, unless `mine.consolidate: false` or
+`--disable_consolidation`, builds the engine at startup and runs it beside
+the mining loop, its lines prefixed `[consolidate]`. A profile the engine
+cannot run on (no tag-along sequencer, a minimum under the storage floor, an
+unknown pinned target) is a warning in the miner, not a failure: mining goes
+on and the banner says the payouts are left where they land. Two
+consolidators on one wallet, the embedded one and a standalone one, do no
+harm beyond noise: both build from the same account snapshot, and the
+ledger resolves the conflicting transactions. The rationale is the lazy
+miner: dilution is no incentive to someone whose income is new coins, so the
+sweep has to happen without anyone deciding to run it.
+
+**Retired on `develop-take1`, 2026-09-22.** The miner's treasury loop and
+everything only it used are gone: `mine_treasury.go`, `mine_topup.go`,
+`mine_treasury_test.go`, the miner's own delegation target picker and its
+test, the `held`/`heldCount` fields and the `compactions`/`delegations`
+counters of the totals line, and the `--compact-at`, `--delegate`,
+`--delegate-amount`, `--reserve`, `--max-delegations`, `--cut`,
+`--minimum_cut` and `--no-revocation-windows` flags. The
+`proxi node compact auto` stub is gone too: auto mode shipped as this
+command. `--disable_consolidation` was accepted and ignored from then until
+the engine moved into the miner, where it means what it says again.
+`retryCall` stays in the miner: the mining loop itself uses it.
+
+## 6. Documents to follow
+
+After the code, one at a time, on the docs site: a `participate/consolidate.md`
+page; the mining page loses its treasury section and points at it;
+`wallet_config.md` gains the section; `proxi.md` lists the command. In this
+repo: `kb/compact.md` records that auto mode shipped as consolidate; the
+`kb/` index in `CLAUDE.md` and the `ARCHITECTURE.md` index get this document.
+
+## 7. Decisions taken at approval
+
+1. The second trigger by output count (§2.2): yes, `compact_at`, default 10.
+   Revised the same day: the balance trigger is a separate `threshold_prox`
+   (default 1000 PROX) rather than twice the minimum, and it needs at least
+   two outputs, since one large output is not scattered.
+2. The minimum in PROX, and the key named for it: `minimum_balance_prox`.
+3. A remainder too small to be an output is folded into `moved` (§2.3); "too
+   small" is the sigLock storage deposit, not one PROX (review of 2026-09-15).
+4. The miner and the consolidator are separate processes. The miner can be
+   any program, and nothing here assumes its behaviour; `proxi node mine` is
+   left as it is until consolidate has been tested (§5).
+5. Threshold lowered from 1000 to 300 PROX on `develop-take1` (2026-09-23) for
+   the take 1 payouts of 94 PROX at pace 1: the trigger keeps firing every few
+   payouts, and what it moves clears the 90 PROX minimum of the top-up
+   request. `compact_at` stays at 10: with the balance trigger firing every
+   three or four payouts the count trigger rarely leads.

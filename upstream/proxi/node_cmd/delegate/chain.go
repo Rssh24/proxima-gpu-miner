@@ -1,0 +1,237 @@
+package delegate
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/lunfardo314/proxima/proxi/glb"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+// addAmount is the optional top-up: tokens moved from the wallet into the
+// delegation in the same transaction that delegates it. See
+// kb/archive/shipped/delegation_add_tokens.md.
+var addAmount uint64
+
+func initDelegationSubmitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "chain <chain ID> [flags]",
+		Short: `delegates existing chain to the target sequencer`,
+		Args:  cobra.ExactArgs(1),
+		Run:   runDelegationSubmitCmd,
+	}
+
+	glb.AddFlagTarget(cmd)
+
+	cmd.PersistentFlags().StringVarP(&targetChainIDStr, "delegation_target", "q", "", "target sequencer id")
+	err := viper.BindPFlag("delegation_target", cmd.PersistentFlags().Lookup("delegation_target"))
+	glb.AssertNoError(err)
+
+	addFlagCut(cmd)
+
+	cmd.PersistentFlags().Uint64Var(&addAmount, "add", 0, "also move this many tokens from the wallet into the delegation")
+
+	cmd.InitDefaultHelpCmd()
+	return cmd
+}
+
+func runDelegationSubmitCmd(cmd *cobra.Command, args []string) {
+	walletData := glb.GetWalletData()
+
+	glb.Infof("wallet account is: %s", walletData.Account.String())
+
+	var err error
+	var targetSeqID base.ChainID
+
+	chainID, err := base.ChainIDFromHexString(args[0])
+	glb.AssertNoError(err)
+
+	requiredCut := delegatorCut(cmd)
+	if targetChainIDStr == "" {
+		targetSeqID, err = chooseRandomSequencerForDelegation(requiredCut)
+		glb.AssertNoError(err)
+	} else {
+		targetSeqID, err = base.ChainIDFromHexString(targetChainIDStr)
+		glb.Assertf(err == nil, "failed parsing target chainID: %v", err)
+	}
+
+	tagAlongSeqID := glb.GetTagAlongSequencerID()
+	glb.Assertf(tagAlongSeqID != nil, "tag-along sequencer not specified")
+	feeAmount, err := glb.GetRequiredTagAlongFee(*tagAlongSeqID)
+	if err != nil {
+		glb.Infof("error getting tag-along fee: %s", err)
+		return
+	}
+	glb.Verbosef("tag-along fee: %s", util.Th(feeAmount))
+
+	lib := glb.GetTxLibrary()
+	consts := glb.GetLedgerConstants()
+	client := glb.GetClient()
+
+	ts := glb.GetLedgerTimeNow()
+	if ts.IsSlotBoundary() {
+		ts = ts.AddTicks(10)
+	}
+	oIn, _, err := client.GetChainOutput(chainID)
+	glb.AssertNoError(err)
+
+	ti, err := client.GetSequencerTargetInfo(targetSeqID)
+	glb.Assertf(err == nil, "cannot retrieve target info for %s: %v", targetSeqID.StringShort(), err)
+
+	est := estimateDelegation(consts, client, ti, oIn.Output.TokenBalance(), byte(consts.DelegationMaxFrozenEpochs), requiredCut, targetSeqID, ts.Slot)
+	effCut := confirmDelegationEstimate(est, oIn.Output.TokenBalance(), requiredCut, targetSeqID)
+
+	// If the input is already a delegation output, ensure the master can still
+	// unlock it at ts.Slot. Pure wallet-side parse + Constants math.
+	// predIsDelegation also tells the builder below whether the predecessor
+	// already carries a trailing delegateLockState (to replace vs. append).
+	view, predIsDelegation, err := lib.ParseDelegationOutput(oIn.Output.Output, oIn.ID)
+	glb.AssertNoError(err)
+	if predIsDelegation {
+		glb.Assertf(!view.IsInFrozenSlot(ts.Slot, consts),
+			"chain is delegation output NOT unlockable by master at slot %d", ts.Slot)
+	}
+
+	// One-slot inflation projection, evaluated server-side via /eval.
+	inflation := evalChainInflationMultiStep(client, oIn.Output.TokenBalance(), oIn.ID.Slot(), 1)
+
+	// Wasm-style build via txbuildercore + helpers.
+	walletHolderID := base.HolderIDFromED25519PrivateKey(walletData.PrivateKey)
+	txb := txbuildercore.New(0)
+
+	// Consume the predecessor chain output as input 0.
+	predBytes := oIn.Output.Bytes()
+	txb.ConsumeOutput(predBytes, oIn.ID)
+	consumedBytes := [][]byte{predBytes}
+
+	// Master-unlock byte (0xff) satisfies the delegation lock's master path;
+	// chain unlock params point at successor output index 0.
+	txb.PutSignatureUnlock(0, ledger.DelegationUnlockedByMaster)
+	txb.PutUnlockParams(0, ledger.ConstraintIndexChain, txbuildercore.ChainUnlockParams(0))
+
+	// --add: move tokens from the wallet into the delegation in this same
+	// transaction, and pay the fee out of the wallet rather than out of the
+	// delegation. Without it the fee comes off the chain balance, which shrinks
+	// the delegation a little on every transit.
+	//
+	// Works whatever the predecessor is - a plain chain being delegated for the
+	// first time, or a delegation being re-delegated. Two details make that hold:
+	// GetTransferableOutputs excludes chained outputs, so the predecessor can
+	// never come back as a wallet input and be consumed twice; and the first
+	// wallet input carries its own signature unlock rather than referencing
+	// input 0, which it could not do when input 0 is a delegateLock (reference
+	// unlock holds only within one lock kind).
+	remainder := uint64(0)
+	if addAmount > 0 {
+		walletOutputs, _, inWallet, err := client.GetTransferableOutputs(walletData.Account, 254)
+		glb.AssertNoError(err)
+		need := addAmount + feeAmount
+		glb.Assertf(inWallet >= need, "wallet holds %s, need %s to add %s plus the tag-along fee",
+			util.Th(inWallet), util.Th(need), util.Th(addAmount))
+		sumIn := uint64(0)
+		for i, in := range walletOutputs {
+			b := in.Output.Bytes()
+			txb.ConsumeOutput(b, in.ID)
+			consumedBytes = append(consumedBytes, b)
+			sumIn += in.Output.TokenBalance()
+			// input 0 is the delegation, so wallet inputs start at 1 and
+			// reference the signature unlock already placed there
+			if i == 0 {
+				txb.PutSignatureUnlock(1)
+			} else {
+				err = txb.PutUnlockReference(byte(i+1), ledger.ConstraintIndexLock, 1)
+				glb.AssertNoError(err)
+			}
+			if sumIn >= need {
+				break
+			}
+		}
+		remainder = sumIn - need
+	}
+
+	// Compose the new delegation chain transition output.
+	newAmount := oIn.Output.TokenBalance() + inflation + addAmount
+	if addAmount == 0 {
+		newAmount -= feeAmount
+	}
+	delegateLockBin, err := lib.NewDelegateLockBytecode(effCut)
+	glb.AssertNoError(err)
+	chainTransitionBin, err := lib.NewChainTransition(
+		chainID,
+		0, // predInputIndex
+		oIn.OriginSlot,
+		oIn.CumulativeChainInflation+inflation,
+		oIn.CumulativeBranchBonus,
+		oIn.TransitionCounter+1,
+		oIn.BranchCounter,
+	)
+	glb.AssertNoError(err)
+	stateBin, err := lib.NewDelegateLockState(0, 0, 0)
+	glb.AssertNoError(err)
+
+	// Build the successor from the predecessor bytes and overlay ONLY the
+	// constraints delegation owns: amounts (0), index-values (1), lock (2),
+	// chain (3). Everything else the predecessor carries (foundry at 4,
+	// foundryPolicy at 5, …) is preserved untouched — delegation must not
+	// drop immutable constraints that aren't its concern. delegateLockState
+	// lives at the LAST position (Option C): replace the predecessor's
+	// trailing state when re-delegating, otherwise append after the extras.
+	ob, err := txbuildercore.OutputBuilderFromBytes(predBytes)
+	glb.AssertNoError(err)
+	ob.PutConstraint(txbuildercore.EncodeAmounts(newAmount, inflation), txbuildercore.ConstraintIndexAmounts)
+	ob.PutConstraint(txbuildercore.EncodeIndexValuesTuple([][]byte{walletHolderID[:], targetSeqID[:]}), txbuildercore.ConstraintIndexIndexValues)
+	ob.PutConstraint(delegateLockBin, txbuildercore.ConstraintIndexLock)
+	ob.PutConstraint(chainTransitionBin, txbuildercore.ConstraintIndexChain)
+	if predIsDelegation {
+		ob.PutConstraint(stateBin, byte(ob.NumConstraints()-1))
+	} else {
+		ob.MustPushConstraint(stateBin)
+	}
+	succIdx := txb.ProduceOutput(ob.Output().Bytes())
+	glb.Assertf(succIdx == 0, "succIdx==0")
+
+	tagAlongOut, err := txbuildercore.NewTagAlongOutput(lib, feeAmount, *tagAlongSeqID, walletHolderID)
+	glb.AssertNoError(err)
+	tagAlongIdx := txb.ProduceOutput(tagAlongOut.Bytes())
+	glb.Assertf(tagAlongIdx == 1, "tagAlongIdx==1")
+
+	if remainder > 0 {
+		remOut, err := txbuildercore.NewSigLockOutput(lib, remainder, walletHolderID)
+		glb.AssertNoError(err)
+		txb.ProduceOutput(remOut.Bytes())
+	}
+
+	prompt := fmt.Sprintf("delegate %s to sequencer %s (delegator cut %d promille)?", chainID.StringShort(), targetSeqID.String(), effCut)
+	if !glb.YesNoPrompt(prompt, true) {
+		glb.Infof("exit")
+		os.Exit(0)
+	}
+
+	// Stamp + sign AFTER the prompt so the timestamp reflects the moment of
+	// submission rather than the moment we offered the prompt; otherwise a
+	// slow confirmation makes the tx "born stale".
+	ts = glb.GetLedgerTimeNow()
+	if ts.IsSlotBoundary() {
+		ts = ts.AddTicks(10)
+	}
+	ts = base.MaximumTime(ts, oIn.ID.Timestamp().AddTicks(int(consts.TransactionPace)))
+	txb.SetTimestamp(ts)
+	txb.ComputeInputCommitment()
+	txb.SignED25519(walletData.PrivateKey)
+
+	txBytes := txb.Bytes()
+	txid, err := txbuildercore.TxIDFromBytes(txBytes)
+	glb.AssertNoError(err)
+
+	if err := glb.SubmitAndDisplay(txBytes, consumedBytes...); err != nil {
+		os.Exit(1)
+	}
+
+	glb.TrackTxInclusion(txid, 2*time.Second)
+}

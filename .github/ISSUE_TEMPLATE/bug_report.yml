@@ -1,0 +1,45 @@
+name: GPU compatibility or bug report
+description: Report a startup, mining, or GPU compatibility problem.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never post wallet files, private keys, recovery passwords, or your personal data folder.
+        Review exported diagnostics before attaching them. Local accepted solutions are not wallet rewards.
+  - type: input
+    id: version
+    attributes:
+      label: Miner version
+      placeholder: Windows beta 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU model and VRAM
+      placeholder: AMD Radeon RX 9070 XT 16 GB
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows and GPU driver versions
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include steps, expected behavior, and the error message. Remove any private information.
+    validations:
+      required: true
+  - type: textarea
+    id: performance
+    attributes:
+      label: Optional performance observations
+      description: Power mode, VRF attempts/s, average board power, and GPU/hotspot/memory temperatures if available.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Reviewed diagnostics (optional)
+      description: Attach the ZIP from Export diagnostics only after reviewing its contents. Never attach wallet backups.

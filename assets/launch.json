@@ -1,0 +1,12 @@
+{
+  "network": "take1",
+  "ledger_definitions_hash": "ec557ffc6c9a64c9c3fcd3161a7d1cab8d2276e5a45a7d52070e2bc46f203428",
+  "genesis_time_unix": 1792305139,
+  "node_url": "http://65.21.170.230:8001",
+  "witness_urls": [
+    "http://79.137.70.25:8001",
+    "http://51.254.47.76:8001"
+  ],
+  "source_commit": "60515d0074e63e467de6d63532c1236c1bec332a",
+  "bootstrap_sequencer_id": ""
+}

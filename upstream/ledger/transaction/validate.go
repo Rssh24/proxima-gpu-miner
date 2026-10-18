@@ -1,0 +1,477 @@
+package transaction
+
+import (
+	"bytes"
+	"fmt"
+	"math"
+
+	"github.com/lunfardo314/easyfl"
+	"github.com/lunfardo314/easyfl/easyfl_util"
+	"github.com/lunfardo314/easyfl/slicepool"
+	"github.com/lunfardo314/easyfl/tuples"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/lunfardo314/unitrie/common"
+)
+
+func (tx *Transaction) makeEvalContext(path []byte) easyfl.GlobalData[*ledger.EvalContext] {
+	// Use the transaction's cached library for validation
+	dataCtx := ledger.NewEvalContext(tx)
+	dataCtx.SetEvalPath(path)
+	return tx.NewGlobalDataNoTrace(dataCtx)
+}
+
+// ValidatePartialContext runs all validation scripts (constraints) that only needs partial context,
+// i.e. no need for the past cone.
+// This is STAGE 2 of the transaction validation
+// It always scans partial context and optionally runs script of integrity validation in partial context (that includes signature checking)
+// Script can be disabled if it is redundant in the context, e.g. when signature is already validated
+func (tx *Transaction) ValidatePartialContext(runIntegrityValidationScript bool) error {
+	util.Assertf(!tx.partialContextValidated, "repeating run on partial context")
+
+	tx.partialContextValidated = true
+	return util.CatchPanicOrError(func() error {
+		if err := tx.scanPartialContext(); err != nil {
+			return err
+		}
+		if runIntegrityValidationScript {
+			spool := slicepool.New()
+			defer spool.Dispose()
+
+			return tx.TxIntegrityValidatorPartialContext(tx.makeEvalContext(nil), spool)
+		}
+		return nil
+	})
+}
+
+// ValidateFullContext runs all validation scripts (constraints) that require full context,
+// i.e. all consumed UTXOs must be available
+// This is STAGE 3 of the transaction validation. It requires STAGE 1 and STAGE 2 successfully passed
+func (tx *Transaction) ValidateFullContext() error {
+	// Idempotent: the same Transaction object can be validated more than once (a vertex
+	// evicted from the memDAG is re-attached from the txstore writer cache, which still
+	// holds the object of the first attachment). Validation accumulates into these
+	// fields, so every run starts from a clean slate.
+	tx.totalConsumedTokenBalance = 0
+	tx.redeemedScripts = nil
+	tx.nativeTokenAggregator = nil
+
+	var err error
+	if !tx.partialContextValidated {
+		if err = tx.ValidatePartialContext(true); err != nil {
+			return err
+		}
+	}
+	util.Assertf(tx.partialContextValidated, "repeating run on partial context")
+
+	spool := slicepool.New()
+	defer spool.Dispose()
+
+	err = util.CatchPanicOrError(func() error {
+		var err1 error
+		// run tx integrity validation script that requires full context
+		if err1 = tx.TxIntegrityValidatorFullContext(tx.makeEvalContext(nil), spool); err1 != nil {
+			return err1
+		}
+		// run tx level constrains, if any
+		if err1 = tx.validateTxLevelConstraints(spool); err1 != nil {
+			return err1
+		}
+		// run all scripts on consumed and produced UTXOs
+		if err1 = tx.validateOutputs(spool); err1 != nil {
+			return err1
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	// ledger invariant (consumed + inflation = produced) is enforced in validateOutputs()
+	return nil
+}
+
+// evalBytecode safely runs the bytecode in the context of the path
+func (tx *Transaction) evalBytecode(bytecode []byte, evalPath []byte, spool *slicepool.SlicePool) ([]byte, error) {
+	var ret []byte
+	err := util.CatchPanicOrError(func() error {
+		var err1 error
+		ret, err1 = tx._evalBytecode(bytecode, evalPath, spool)
+		return err1
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+// validateTxLevelConstraints evaluates all transaction level constraints, if any.
+// Unlike runTuple — which treats index 0 / index 1 of an output tuple as
+// amounts / index-values data — every element of TxConstraints is plain
+// bytecode and is evaluated as a constraint.
+func (tx *Transaction) validateTxLevelConstraints(spool *slicepool.SlicePool) error {
+	txConstraintsBytes := tx.MustBytesAtPath(ledger.PathToTxConstraints)
+	if len(txConstraintsBytes) == 0 {
+		// nil value of the txConstraints element is no-op
+		return nil
+	}
+	tu, err := tuples.TupleFromBytes(txConstraintsBytes, 256)
+	if err != nil {
+		return fmt.Errorf("parsing tx constraints: %v", err)
+	}
+	evalPath := easyfl_util.Concat(ledger.PathToTxConstraints, byte(0))
+	tu.ForEach(func(idx int, bytecode []byte) bool {
+		evalPath[len(evalPath)-1] = byte(idx)
+		var res []byte
+		res, err = tx.evalBytecode(bytecode, evalPath, spool)
+		if err != nil {
+			err = fmt.Errorf("tx-level constraint '%s' failed with error '%v'. Path: %s",
+				tx._constraintName(bytecode), err, PathToString(evalPath))
+			return false
+		}
+		if len(res) == 0 {
+			err = fmt.Errorf("tx-level constraint '%s' failed (returned empty). Path: %s",
+				tx._constraintName(bytecode), PathToString(evalPath))
+			return false
+		}
+		return true
+	})
+	return err
+}
+
+func (tx *Transaction) writeStateMutationsTo(mut common.KVWriter) {
+	// delete consumed outputs from the ledger
+	tx.ForEachInputID(func(idx byte, oid base.OutputID) bool {
+		mut.Set(oid[:], nil)
+		return true
+	})
+	// add produced outputs to the ledger
+	tx.ForEachProducedOutputData(func(i byte, outputData []byte) bool {
+		oid := base.MustNewOutputID(tx.txid, i)
+		mut.Set(oid[:], outputData)
+		return true
+	})
+}
+
+func (tx *Transaction) validateOutputs(spool *slicepool.SlicePool) error {
+	consumedOuts, err := tx._scanOutputs(ledger.PathToConsumedOutputs)
+	if err != nil {
+		return err
+	}
+	if err = tx._sumConsumedTotals(consumedOuts); err != nil {
+		return fmt.Errorf("validateOutputs: %w", err)
+	}
+	producedSide := tx.producedAmountTotals[ledger.AmountIndexTokenBalance]
+	consumedSide := tx.totalConsumedTokenBalance
+	inflation := tx.producedAmountTotals[ledger.AmountIndexInflation]
+	if producedSide != consumedSide+inflation {
+		return fmt.Errorf("mismatch between token amounts: consumed(%s) + inflation(%s) != produced(%s), diff c+i-p = %s",
+			util.Th(consumedSide),
+			util.Th(inflation),
+			util.Th(producedSide),
+			util.Th(consumedSide+inflation-producedSide),
+		)
+	}
+	if err = tx._runOutputs(ledger.PathToConsumedOutputs, consumedOuts, spool); err != nil {
+		return err
+	}
+	outs, err := tx._scanOutputs(ledger.PathToProducedOutputs)
+	if err != nil {
+		return err
+	}
+	// Enforce storage-deposit floor on every produced output (closes the
+	// dust-attack vector once arbitrary EasyFL locks are admissible at
+	// slot 2). Exempt locks are listed in _locksExemptOfStorageDeposit.
+	// Done here, not inside runTuple/_runOutputs, because the parsed
+	// Output is already in hand and the check is per-output, not
+	// per-constraint.
+	// Stem output index (parse-free, from the sequencer milestone data). Only a
+	// branch tx has a stem, and the parser has already verified the output at
+	// this index carries the stem lock, so it is the one output allowed to index
+	// under the reserved StemAccountID value below.
+	stemOutputIdx := -1
+	if tx.IsBranchTransaction() {
+		if sd := tx.SequencerTransactionData(); sd != nil {
+			stemOutputIdx = int(sd.StemOutputIndex)
+		}
+	}
+	for i, o := range outs {
+		min := tx.Library.MinimumStorageDeposit(o)
+		bal := o.TokenBalance()
+		if bal < min {
+			return fmt.Errorf("storage deposit not met at produced output %d: balance %s, required %s (%s short, output size %d bytes)",
+				i, util.Th(bal), util.Th(min), util.Th(min-bal), len(o.Bytes()))
+		}
+		// Inflation and frozen coverage are chain-only quantities, governed by
+		// the chain / delegateLock constraints of a chained output. A non-chained
+		// output must carry neither. Enforced here rather than inside the locks
+		// because slot 2 admits arbitrary bytecode as an opaque lock, which is
+		// under no obligation to enforce it — same reason the storage-deposit
+		// floor above is a tx-level check. Frozen coverage on a non-chained
+		// output would otherwise let a sequencer manufacture ledger coverage
+		// (consensus weight) with no tokens behind it.
+		if o.ChainConstraint() == nil {
+			if a := o.Amounts(); !a.IsFrozenCoverageZero() || o.Inflation() != 0 {
+				return fmt.Errorf("inflation and frozen coverage must be 0 on non-chained produced output %d", i)
+			}
+		}
+		// The index-value tuple (output element 1) is unevaluated data, and with
+		// arbitrary EasyFL locks admissible at slot 2 the entries can be
+		// arbitrary too — the ledger cannot validate them against the lock. Only
+		// two rules can and must be enforced on the raw entries here:
+		//   1. No duplicate non-empty entry. The state indexer adds one trie
+		//      record per non-empty entry and rejects a pre-existing key, so a
+		//      duplicate would fail the branch-commit mutation.
+		//   2. No reserved index value. StemAccountID (0x00) is reserved for the
+		//      stem: the stem readers assert exactly one record under it, so a
+		//      second output indexing under it is a committed-state node crash.
+		//      Only the stem output itself may carry it (its stem-ness is
+		//      enforced by the stem/sequencer constraints at stemOutputIdx).
+		iv := o.IndexValues()
+		nonEmpty := make([][]byte, 0, len(iv))
+		for _, v := range iv {
+			if len(v) == 0 {
+				continue // empty entries are placeholders, skipped by the indexer
+			}
+			if i != stemOutputIdx && bytes.Equal(v, ledger.StemAccountID) {
+				return fmt.Errorf("reserved index value (StemAccountID) on produced output %d", i)
+			}
+			nonEmpty = append(nonEmpty, v)
+		}
+		if len(nonEmpty) > 1 && tuples.MakeTupleFromDataElements(nonEmpty...).HasDuplicates() {
+			return fmt.Errorf("duplicate index-value entries on produced output %d", i)
+		}
+	}
+	if err = tx._runOutputs(ledger.PathToProducedOutputs, outs, spool); err != nil {
+		return err
+	}
+	// Closing native-token balance check: for every tag declared by a
+	// tx-level token(...) call, assert
+	//   mint: producedSum == consumedSum + deltaMag
+	//   burn: consumedSum == producedSum + deltaMag
+	// The aggregator has already accumulated the per-side sums as each
+	// tokenAmount(tag, amount) constraint fired during _runOutputs;
+	// undeclared tags are impossible because tokenAmount itself fails
+	// when its tag has no entry. This is the only tx-wide step.
+	// Sum native-token amounts by scanning the output tuples structurally,
+	// counting only top-level tokenAmount(tag, amount) constraints. Doing the
+	// accounting here — rather than as a side effect of evaluating tokenAmount —
+	// closes the counterfeit where a tokenAmount hidden behind
+	// if(selfIsConsumedOutput, ...) is credited on one side only: a nested
+	// tokenAmount is not a top-level constraint, so it is never counted. Runs
+	// unconditionally so a tokenAmount with no token(...) declaration is rejected
+	// too (it would otherwise fabricate tokens uncounted).
+	if err = tx.accumulateNativeTokenAmounts(consumedOuts, outs); err != nil {
+		return err
+	}
+	if tx.nativeTokenAggregator != nil {
+		if err = tx.nativeTokenAggregator.CheckBalances(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// _scanOutputs parses outputs using the transaction's cached library for deterministic validation.
+// IMPORTANT: parsing does not depend on the library version
+func (tx *Transaction) _scanOutputs(pathToOutputs []byte) ([]*ledger.Output, error) {
+	var err error
+	ret := make([]*ledger.Output, tx.MustNumElementsAtPath(pathToOutputs))
+
+	_ = tx.ForEach(func(i byte, data []byte) bool {
+		ret[i], err = ledger.OutputFromBytesWithLib(data, tx.Library) // TODO a bit redundant
+		return err == nil
+	}, pathToOutputs)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+// _runOutputs iterates over UTXOs in the list and runs all scripts on every output
+func (tx *Transaction) _runOutputs(pathToOutputs []byte, outs []*ledger.Output, spool *slicepool.SlicePool) error {
+	util.Assertf(len(outs) <= 256, "len(outs)<=256")
+
+	path := common.Concat(pathToOutputs, 0)
+	for i := 0; i < len(outs); i++ {
+		o := outs[i]
+		var err error
+		path[len(path)-1] = byte(i)
+		if err = tx.runTuple(o.Tuple, path, spool); err != nil {
+			return fmt.Errorf("%w :\n%s", err, o.LinesHR("   ").String())
+		}
+	}
+	return nil
+}
+
+func (tx *Transaction) _sumConsumedTotals(outs []*ledger.Output) error {
+	for i, o := range outs {
+		bal := o.TokenBalance()
+		if tx.totalConsumedTokenBalance > int64(math.MaxInt64)-int64(bal) {
+			return fmt.Errorf("arithmetic overflow at consumed output #%d", i)
+		}
+		tx.totalConsumedTokenBalance += int64(bal)
+	}
+	return nil
+}
+
+func (tx *Transaction) UnlockParams(consumedOutputIdx, constraintIdx byte) []byte {
+	return tx.MustBytesAtPath(easyfl_util.Concat(ledger.PathToUnlockParams, consumedOutputIdx, constraintIdx))
+}
+
+// runTuple treats the tuple as a collection of bytecodes, except at the two
+// fixed data positions:
+//   - index 0 (amounts): parsed as the amounts vector, no eval.
+//   - index 1 (index-value tuple): a tuple of indexable values used for
+//     trie indexing — pure data, never evaluated as bytecode.
+func (tx *Transaction) runTuple(tu *tuples.Tuple, ctxPath tuples.TreePath, spool *slicepool.SlicePool) error {
+	// no check for duplicates: makes no sense
+
+	evalPath := easyfl_util.Concat(ctxPath, byte(0))
+	var err error
+
+	tu.ForEach(func(idx int, bytecode []byte) bool {
+		if idx == int(ledger.ConstraintIndexAmounts) {
+			// tuple of amounts is expected
+			if _, err = ledger.AmountsFromBytes(bytecode); err != nil {
+				err = fmt.Errorf("amounts vector does not parse: '%v'. Path: %s", err, PathToString(evalPath))
+				return false
+			}
+			return true
+		}
+		if idx == int(ledger.ConstraintIndexIndexValues) {
+			// index-value tuple — pure data, never evaluated as bytecode.
+			return true
+		}
+		// not amount, not index-values
+		// An empty bytecode at an extras position (>= ConstraintIndexChain)
+		// is a placeholder used to keep a downstream constraint at a fixed
+		// index (e.g. delegateLockState at the last position when
+		// preceding slots are skipped). Treat it as absent.
+		if len(bytecode) == 0 && idx >= int(ledger.ConstraintIndexChain) {
+			return true
+		}
+		evalPath[len(evalPath)-1] = byte(idx)
+		var res []byte
+
+		res, err = tx.evalBytecode(bytecode, evalPath, spool)
+		if err != nil {
+			err = fmt.Errorf("constraint '%s' failed with error '%v'. Path: %s", tx._constraintName(bytecode), err, PathToString(evalPath))
+			return false
+		}
+		if len(res) == 0 {
+			var decomp string
+			decomp, err = tx.DecompileBytecode(bytecode)
+			if err != nil {
+				decomp = fmt.Sprintf("(error while decompiling constraint: '%v')", err)
+			}
+			err = fmt.Errorf("constraint '%s' failed. Path: %s", decomp, PathToString(evalPath))
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tx *Transaction) SubtreeAtPath(path []byte) (*tuples.Tree, error) {
+	return tx.Subtree(path)
+}
+
+func PathToString(path []byte) string {
+	ret := "@"
+	if len(path) == 0 {
+		return ret + ".nil"
+	}
+	if len(path) >= 1 {
+		switch path[0] {
+		case ledger.TransactionTuple:
+			ret += ".tx"
+			if len(path) >= 2 {
+				switch path[1] {
+				case ledger.TxVersion:
+					ret += ".version"
+				case ledger.TxUnlockData:
+					ret += ".unlock"
+				case ledger.TxInputIDs:
+					ret += ".inID"
+				case ledger.TxOutputs:
+					ret += ".out"
+				case ledger.TxSignatureData:
+					ret += ".sig"
+				case ledger.TxTimestamp:
+					ret += ".ts"
+				case ledger.TxInputCommitment:
+					ret += ".inhash"
+				case ledger.TxConstraints:
+					ret += ".txConstraints"
+				case ledger.TxExplicitBaseline:
+					ret += ".explicitBaseline"
+				case ledger.TxEndorsements:
+					ret += ".endorsements"
+				default:
+					ret += "WRONG[1]"
+				}
+			}
+			if len(path) >= 3 {
+				ret += fmt.Sprintf("[%d]", path[2])
+			}
+			if len(path) >= 4 {
+				ret += fmt.Sprintf(".constraint[%d]", path[3])
+			}
+			if len(path) >= 5 {
+				ret += fmt.Sprintf("..%v", path[4:])
+			}
+		case ledger.ConsumedTuple:
+			ret += ".consumed"
+			if len(path) >= 2 {
+				if path[1] != 0 {
+					ret += ".WRONG[1]"
+				} else {
+					ret += ".[0]"
+				}
+			}
+			if len(path) >= 3 {
+				ret += fmt.Sprintf(".out[%d]", path[2])
+			}
+			if len(path) >= 4 {
+				ret += fmt.Sprintf(".constraint[%d]", path[3])
+			}
+			if len(path) >= 5 {
+				ret += fmt.Sprintf("..%v", path[4:])
+			}
+		default:
+			ret += ".WRONG[0]"
+		}
+	}
+	return ret
+}
+
+// _constraintName returns the name of the constraint from its bytecode using the transaction's cached library
+func (tx *Transaction) _constraintName(binCode []byte) string {
+	if binCode[0] == 0 {
+		return "array_constraint"
+	}
+	prefix, err := tx.ParsePrefixBytecode(binCode)
+	if err != nil {
+		return fmt.Sprintf("unknown_constraint(%s)", easyfl_util.Fmt(binCode))
+	}
+	name, found := ledger.NameByPrefixWithLib(prefix, tx.Library)
+	if found {
+		return name
+	}
+	return fmt.Sprintf("constraint_call_prefix(%s)", easyfl_util.Fmt(prefix))
+}
+
+func (tx *Transaction) _evalBytecode(bytecode []byte, path []byte, spool *slicepool.SlicePool) ([]byte, error) {
+	if len(bytecode) == 0 {
+		return nil, fmt.Errorf("bytecode can't be empty")
+	}
+	if bytecode[0] == 0 {
+		return nil, fmt.Errorf("binary code cannot begin with 0-byte")
+	}
+	evalCtx := tx.makeEvalContext(path)
+	return tx.EvalFromBytecodeWithSlicePool(evalCtx, spool, bytecode)
+}

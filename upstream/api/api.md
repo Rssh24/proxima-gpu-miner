@@ -1,0 +1,518 @@
+# Node API (`/api/v1`)
+
+This is the node's main HTTP API. Two companion references cover the rest of the surface:
+
+- [`txapi.md`](txapi.md) — the `/txapi/v1` transaction-building and parsing helpers.
+- Browser HTML tools (`/dashboard`, `/peers`, `/dagviz`, `/dag_explorer`, `/chain_explorer`)
+  are described in [`run_access.md`](https://lunfardo314.github.io/#/participate/run_access); their JSON backends are listed under
+  [Explorer backends](#explorer-backends) below.
+
+## Conventions
+
+- Endpoints are HTTP `GET` unless marked **POST** (`eval`, `submit_tx`, `txlog/enable`).
+- Responses are JSON. Most carry an `error` field — empty/absent on success, set on failure;
+  failures are returned with HTTP 200 unless noted. A few endpoints return raw bytes or plain
+  text (noted per endpoint).
+- Transaction IDs, output IDs, chain IDs and other identifiers are **hex-encoded**.
+- **LRB** = latest reliable branch (the consensus ledger state).
+- Example base URL in the snippets: `http://localhost:8000`.
+
+## Common response shapes
+
+These appear in several endpoints:
+
+- **`OutputDataWithID`** — `{ "id": "<hex output ID>", "data": "<hex raw output bytes>" }`.
+- **`BranchDataJSONAble`** — branch metadata, with these fields: `root` (object
+  `{ root, sequencer_id }`), `stem_output_index`, `sequencer_output_index`, `on_chain_amount`,
+  `branch_inflation`, `supply`, `total_coverage`, `coverage_delta`, `frozen_coverage`,
+  `slot_inflation`, `num_confirmed_transactions`, `num_seq_transactions`, `num_seq`,
+  `baseline_root`.
+
+Sections:
+
+- [Ledger](#ledger)
+- [State queries](#state-queries)
+- [Transactions](#transactions)
+- [Branches and chain state](#branches-and-chain-state)
+- [Node status](#node-status)
+- [Snapshots](#snapshots)
+- [Explorer backends](#explorer-backends)
+- [Transaction log](#transaction-log)
+- [WebSocket](#websocket)
+
+---
+
+## Ledger
+
+### get_ledger_definition
+
+The compiled ledger library for a slot (the rules in force at that slot).
+
+`/api/v1/get_ledger_definition?slot=<n>` — `slot` optional, default latest.
+
+Response: `error`, `upgrade_slot`, `library_json` (full compiled library as JSON text),
+`library_hash` (hex), `prev_library_hash` (hex), `prev_upgrade_slot`, and `commitment`,
+the proof that the ledger commits to this library:
+
+- `commitment.branch_id` — the node's latest reliable branch (hex transaction ID);
+- `commitment.branch_tx_bytes` — the raw bytes of that branch (hex); its stem output carries
+  the trie root of the branch's baseline state;
+- `commitment.upgrade_utxo_bytes` — the upgrade commitment UTXO of `upgrade_slot` as held in
+  that baseline state (hex); it holds the library hash, the previous hash and the previous slot;
+- `commitment.proof` — the Merkle proof of that UTXO under the baseline root (hex, unitrie
+  `trie_blake2b` proof bytes);
+- `commitment.error` — set instead of the four fields when the node cannot prove, which
+  happens only while the latest reliable branch is the very branch that injected the upgrade
+  UTXO (one slot after an upgrade).
+
+A wallet checks the chain itself: the branch ID is the hash of the branch bytes, the bytes
+carry the baseline root, the proof binds the UTXO to the root, the UTXO names the library
+hash, and the hash is recomputed from `library_json`. The `library_hash` field is a
+convenience, never the thing verified. `proxi` and the wasm wallet refuse a library without
+a verifying `commitment`, and `proxi` then confirms `branch_id` with its witness nodes
+(`api.node_urls` in the wallet profile). Design: `kb/library_proof.md`,
+`kb/api_witnesses.md`.
+
+### ledger_constants
+
+The ledger constants a wallet needs for local transaction building (slot/tick math, pace,
+epoch limits, token names, etc.).
+
+`/api/v1/ledger_constants?slot=<n>` — `slot` optional, default latest.
+
+Response fields include: `hash`, `description`, `genesis_controller_signature`,
+`genesis_time_unix`, `tick_duration_ns`, `ticks_per_slot`, `initial_supply`,
+`base_token_name`, `base_token_name_ticker`, `smallest_amount_name`,
+`smallest_amounts_per_base_token`, `slot_inflation_base`, `minimum_inflatable_amount_0`,
+`transaction_pace`, `transaction_pace_sequencer`, `max_number_of_endorsements`,
+`pre_branch_consolidation_ticks`, `safe_revocation_slots`, `delegation_epoch_slots`,
+`max_frozen_epochs`, `delegation_epoch_slots_min`/`_max`,
+`delegation_max_frozen_epochs_min`/`_max`, `tag_along_slots`, `tag_along_reclaim_slots`,
+`attachment_cost_budget`, `tx_id_state_ttl_slots`,
+`healthy_coverage_numerator`/`_denominator`.
+
+### get_ledger_time
+
+The node's current ledger time.
+
+`/api/v1/get_ledger_time`
+
+Response: `error`, `slot`, `tick`, `time` (hex, the 5-byte ledger-time wire form).
+
+### eval
+
+Evaluates one or more **closed** EasyFL formulas (no `$0`/`$1` arguments) server-side. Used
+by wallets for values they cannot compute locally.
+
+**POST** `/api/v1/eval` — JSON body:
+
+```json
+{ "slot": 0, "sources": ["<closed EasyFL formula>", "..."] }
+```
+
+`slot` optional (0/omitted = latest). Response: `error`, `results` — an array of
+`{ "value": "<hex result bytes>", "error": "<per-formula error>" }`. Each formula is
+evaluated independently; a single formula failing does not fail the batch.
+
+---
+
+## State queries
+
+### get_outputs
+
+The unified state-query endpoint (it replaced the older per-account query endpoints). It
+returns outputs from the LRB state indexed by a value (a controller / holder / target hash),
+with filtering and sorting.
+
+`/api/v1/get_outputs?index_value=<hex>&...`
+
+| Param | Required | Meaning |
+|-------|----------|---------|
+| `index_value` | **yes** | The indexed value to look up (1–255 bytes hex). With `spendable=true` it is treated as the wallet holder ID. |
+| `max_outputs` | no | Max outputs to return (default 200). |
+| `sort_by` | no | `timestamp` (default) or `amount`. |
+| `sort_order` | no | `asc` (default) or `desc`. |
+| `for_amount` | no | Return the shortest prefix whose summed amount ≥ this value (`none`/0 = no cut). |
+| `lock_type` | no | Filter by lock kind and the role `index_value` plays in it: `all`, `sigLock` (default), `chainLock`, `tagAlongMaster`, `tagAlongTarget`, `delegateMaster`, `delegateTarget`. |
+| `chained` | no | `true`/`false` — tri-state; omitted = both; `true` = only outputs with a chain constraint. |
+| `spendable` | no | `true`/`false` (default false) — keep only outputs claimable by `index_value` under a single-signature unlock at `target_slot`. |
+| `target_slot` | no | Slot used for the deadline check on `sendWithDeadline` outputs (0/omitted = current LRB slot). |
+
+Response: `error`, `outputs` (array of [`OutputDataWithID`](#common-response-shapes)),
+`available_amount` (sum over the filtered set, before `max_outputs` truncation),
+`limit_exceeded` (server iteration cap hit), `lrbid` (hex).
+
+### get_chain_output
+
+The current output of a chain.
+
+`/api/v1/get_chain_output?chainid=<hex>`
+
+Response: [`OutputDataWithID`](#common-response-shapes) fields (`id`, `data`) plus `lrbid`
+and `error`.
+
+### is_known_controller
+
+Whether a controller owns at least one output in the LRB state. This is the
+predicate the node applies to the sender of an incoming transaction: a
+transaction signed by a holder unknown in the LRB is dropped.
+
+`/api/v1/is_known_controller?controller_id=<hex>`
+
+Response: `error`, `known` (bool), `lrbid` (hex).
+
+### get_output
+
+A single output by ID.
+
+`/api/v1/get_output?id=<hex output ID>`
+
+Response: `error`, `output_data` (hex), `lrbid`. Not found → `error: "output not found"`.
+
+### get_all_chains
+
+All chain outputs in the LRB.
+
+`/api/v1/get_all_chains`
+
+Response: `error`, `chains` (map of chain-ID hex → [`OutputDataWithID`](#common-response-shapes)),
+`lrbid`.
+
+### get_sequencers
+
+All sequencer chains in the LRB.
+
+`/api/v1/get_sequencers`
+
+Response: `error`, `lrbid`, `sequencers` (map of sequencer-ID hex → object with
+[`OutputDataWithID`](#common-response-shapes) fields plus `num_delegations`).
+
+### get_sequencer_target_info
+
+Detailed info about a sequencer as a delegation target. Used by `proxi node delegate
+target_info` / `estimate`.
+
+`/api/v1/get_sequencer_target_info?chainid=<hex>` — errors if the chain is not a sequencer.
+
+Response: `error`, `lrbid`, `sequencer_id`, `name`, `origin_slot`, `current_output_slot`,
+`transition_counter`, `branch_counter`, `token_balance`, `storage_deposit`,
+`frozen_coverage` (array), `cumulative_chain_inflation`, `cumulative_branch_bonus`,
+`minimum_fee`, `profit_margin_promille`, `greedy`, `pace`, `enforce_freeze_bounds`, `now_slot`,
+`current_epoch`, `next_epoch_boundary_slot`, `max_frozen_epochs`, `epoch_duration_slots`,
+`coverage_upper_bound`.
+
+### get_inactive
+
+Inactive (long-unspent) UTXOs, oldest first.
+
+`/api/v1/get_inactive?slots_back=<n>` — `slots_back` optional (default 360 ≈ 1 hour). Capped
+at 1000 results.
+
+Response: `error`, `lrbid`, `since_slot`, `utxos` — array of
+`{ "id": <hex>, "lock": <lock source>, "amount": <number>, "output_string": <string> }`.
+
+---
+
+## Transactions
+
+### submit_tx
+
+Submits a raw transaction.
+
+**POST** `/api/v1/submit_tx` — JSON body (max 2 MiB):
+
+```json
+{
+  "tx_bytes": "<hex raw transaction bytes>",
+  "consumed_utxos": ["<hex>", "..."],
+  "validate_only": false
+}
+```
+
+`tx_bytes` required. `consumed_utxos` optional, ordered to match the transaction's inputs;
+supplying them enables full-context validation before submission. `validate_only` validates
+without enqueuing.
+
+Response (always HTTP 200): `ok` (bool), `tx_id` (hex, on success), `stage` (`parse` / `full`
+/ `submit`, on failure), `error`.
+
+### check_txid_in_lrb
+
+Checks whether a transaction is included in the LRB (or up to `max_depth` branches back).
+
+`/api/v1/check_txid_in_lrb?txid=<hex>&max_depth=<n>` — `max_depth` optional (default 1).
+
+Response: `error`, `txid`, `lrbid`, `found_at_depth` (the branch depth it was found at).
+
+---
+
+## Branches and chain state
+
+### get_latest_reliable_branch
+
+The current LRB.
+
+`/api/v1/get_latest_reliable_branch`
+
+Response: `error`, `branch_id` (hex), `branch_data` ([`BranchDataJSONAble`](#common-response-shapes)).
+
+### get_mainchain
+
+A run of branches back along the main chain.
+
+`/api/v1/get_mainchain?max=<n>` — `max` optional (default 20).
+
+Response: `error`, `branches` — array of `{ "id": <hex>, "data": `[`BranchDataJSONAble`](#common-response-shapes)` }`.
+
+### get_branch_list
+
+Branch IDs along the main chain, oldest first. Used by the sync module.
+
+`/api/v1/get_branch_list?after_branch=<hex>&from_slot=<n>&max=<n>`
+
+- `after_branch` (optional, hex txid): fork-safe mode — branches after it (errors if it is not
+  on the main chain). Takes priority over `from_slot`.
+- `from_slot` (optional): branches with slot greater than this.
+- `max` (optional): default 100.
+
+Response: `error`, `branches` (array of hex txids, oldest first), `lrb_slot`.
+
+### last_known_milestones
+
+The latest milestone seen per sequencer.
+
+`/api/v1/last_known_milestones`
+
+Response: `error`, `sequencers` — map of sequencer-ID hex → `{ latest_milestone_txid,
+last_branch_txid, milestone_count, last_activity_unix_nano }`.
+
+---
+
+## Node status
+
+### sync_info
+
+`/api/v1/sync_info`
+
+Response: `error`, `synced`, `current_slot`, `lrb_slot`, `ledger_coverage`, `per_sequencer`
+(map of sequencer-ID → `{ synced, latest_healthy_slot, latest_committed_slot,
+ledger_coverage }`).
+
+### node_info
+
+`/api/v1/node_info`
+
+Response: `id` (peer ID), `version`, `commit_hash`, `commit_time`, `num_static_peers`,
+`num_dynamic_alive`, `sequencers`, `memory_stress_level` (0–100), `pipeline_size`,
+`is_syncing`, `is_snapshotting`.
+
+### peers_info
+
+`/api/v1/peers_info`
+
+Response: `error`, `host_id`, `peers` — array of `{ id, multiAddresses, is_static, is_alive,
+when_added, num_incoming_pull, num_incoming_tx, rtt_ms }`.
+
+---
+
+## Snapshots
+
+The snapshot endpoints require `snapshot.enable_download_api: true` in the node config.
+
+`get_snapshot_info` and `get_snapshot` apply a serve gate: unless `snapshot.always_serve:
+true` is set, the latest snapshot is served only if the node is synced, the snapshot is
+at least 64 slots old (or within 64 slots of genesis), and its branch is in the past of
+the node's latest reliable branch (LRB). When refused, `get_snapshot_info` returns the
+diagnostic in its `error` field; `get_snapshot` responds with a non-200 status.
+
+### get_snapshot_info
+
+Metadata about the latest snapshot.
+
+`/api/v1/get_snapshot_info`
+
+Response: `error`, `slot`, `file_size`, `file_name`.
+
+### get_snapshot_branch_id
+
+The branch ID of the latest snapshot.
+
+`/api/v1/get_snapshot_branch_id`
+
+Response: `error`, `id` (hex txid).
+
+### get_snapshot
+
+Downloads the snapshot file. **The response body is the raw snapshot file**, not JSON
+(served as an attachment). See [`snapshot_format.md`](../ledger/multistate/snapshot_format.md).
+
+`/api/v1/get_snapshot`
+
+---
+
+## Explorer backends
+
+These JSON/text endpoints back the browser tools (`/dag_explorer`, `/chain_explorer`). Their
+shapes are display-oriented and may evolve with the UIs.
+
+### dag_explorer/past_cone
+
+`/api/v1/dag_explorer/past_cone?txid=<hex>&depth=<n>` — `depth` optional (default 6). Returns
+a `{ vertices, edges, tip_id, diagnostic }` graph. Each vertex carries `id`, `short_id`,
+`slot`, `tick`, `is_seq`, `is_branch`, `seq_chain_id`, `num_inputs`, `num_outputs`, and
+display flags; each edge carries `from`, `to`, `type` (`input`/`endorsement`/`baseline`).
+Errors use real HTTP status codes.
+
+### dag_explorer/slot
+
+`/api/v1/dag_explorer/slot?slot=<n>&slots_back=<n>` — `slots_back` optional (default 0). Same
+graph shape as `past_cone`.
+
+### dag_explorer/find_tx
+
+`/api/v1/dag_explorer/find_tx?q=<query>` — `q` is a dashed short transaction ID
+(`[s]slot-tick-hashPrefix`) or a hex byte-prefix. Returns an array of `{ id, short_id }`
+(max 50).
+
+### dag_explorer/tx_detail
+
+`/api/v1/dag_explorer/tx_detail?txid=<hex>` — returns the parsed transaction as **plain text**
+(the same rendering as `proxi db txstore get -p`). 404 if not found.
+
+### chain_explorer/list
+
+`/api/v1/chain_explorer/list?max=<n>&kind=<kind>&index_value=<hex>&controller=<hex>&delegation_target=<hex>&not_frozen=<bool>&sort=<order>`
+
+`kind` is `all` (default) / `sequencer` / `foundry` / `delegation` / `mining` / `generic`;
+the hex filters match index-values entries (`controller` at position 0, the delegation
+master; `delegation_target` at position 1); `not_frozen=true` keeps only delegations not
+frozen at the LRB. `sort` is `balance` (default, descending), `master`, `target` or `rating`: master and
+target group the page by that index value, inside a group the fewest
+`frozen_slots_left` first, then balance descending; rating is the draw order of the
+delegation rating, the unrated after. Returns LRB-level aggregates
+(`total_supply`, `frozen_coverage`, `total_coverage`, `slot_inflation`, counts, etc.) and
+`rows`, one per chain: `chain_id`, `output_id`, `kind`, `balance`, `frozen`, `origin_slot`,
+`transition_counter`, `last_active_slot`, `index_values`, and an optional nested
+`sequencer` / `foundry` / `delegation` / `mine` block. The `delegation` block carries
+`status_at_lrb`, `frozen_at_lrb` and `frozen_slots_left` (slots until the safe revocation
+window opens, 0 when not frozen). In the sequencer view the `sequencer` block carries
+`rating` (`rating`, `position`, `probability` in percent): the sequencer's place in the
+delegation rating of `kb/sequencer_rating.md`, computed over every sequencer in the LRB
+state; absent when the sequencer is not rated (no settled milestone in the last 5 slots, or
+leaving delegators nothing).
+
+### chain_explorer/utxo
+
+`/api/v1/chain_explorer/utxo?chain_id=<hex>` — the current UTXO of a chain (note: chain ID,
+not output ID). Returns `chain_id`, `output_id`, `size_bytes`, `elements` (decoded tuple
+lines), and optional `chain` / `seq_data` blocks.
+
+---
+
+## Transaction log
+
+The per-transaction log (txlog). Enabling/disabling via the API requires it to be allowed in
+the node config.
+
+### txlog/enable
+
+**POST** `/api/v1/txlog/enable?level=<level>` — `level` is `off` (default) / `branch` /
+`sequencer` / `non_sequencer` / `all`. Response: `error`, `enabled`, `level`.
+
+### txlog/get
+
+`/api/v1/txlog/get?prefix=<hex>&max=<n>` — `prefix` required (short txid prefix), `max`
+optional (default 100). Requires the log to be enabled. Response: `error`, `records` — array
+of `{ txid, clock_timestamp (Unix ns), message }`.
+
+### txlog/range
+
+`/api/v1/txlog/range?from=<unix_ns>&to=<unix_ns>&max=<n>` — `from` required, `to` optional
+(default now), `max` optional (default 100). Same response shape as `txlog/get`.
+
+### txlog/status
+
+`/api/v1/txlog/status` — Response: `error`, `enabled`, `level`.
+
+---
+
+## WebSocket
+
+### dag_vertex_stream
+
+Real-time stream of DAG vertices, used by the live MemDAG visualizer (`/dagviz`).
+
+`/wsapi/v1/dag_vertex_stream` (WebSocket upgrade)
+
+Server-push only; client messages are ignored. Same-origin only. Enabled by
+`api.dag_streaming.enable`; connection count and lifetime are bounded by
+`api.dag_streaming.max_connections` and `api.dag_streaming.connection_ttl_minutes`.
+The older `api.streaming.*` spelling is still accepted as a synonym.
+
+Two text-frame message shapes are streamed:
+
+- **Vertex add** — a `VertexWithDependencies` object (the same shape returned by
+  [`get_vertex_dep`](txapi.md#get_vertex_dep): `id`, `a`, `i`, `seqid`, `seqname`,
+  `num_endorse`, `holder`, `cd`, `supply`, `seqidx`, `stemidx`, `in`, `endorse`,
+  `explicit_baseline`).
+- **Vertex delete** — `{ "id": "<hex>" }`, sent when a vertex is removed from the MemDAG.
+
+### mining_tx_stream
+
+Real-time stream of fair-launch mine-chain transits, used by `proxi node mine` so
+every miner learns of a new transit at gossip speed instead of waiting for LRB
+confirmation.
+
+`/wsapi/v1/mining_tx_stream?ledger_hash=<hex>&miner_version=<n>` (WebSocket upgrade)
+
+The client names the ledger it mines on and its own version. `ledger_hash` is
+the library hash at slot 0, the "ledger definitions hash" published with the
+genesis, which `get_ledger_definition?slot=0` returns. `miner_version` must
+equal the ledger's `miner_version` constant for the current slot (served by
+`ledger_constants`): the mine lock requires that version on every transit, so
+a miner on another version builds only invalid transits; a missing value is
+version 0. A client whose hash or version does not match is closed right after
+the upgrade with close code 1008 (policy violation) whose text gives the
+reason, the node's hash or the version to move to ("update proxi"), and the
+client's address is noted for 5 minutes: further mismatching attempts from it
+are answered with the time left and no log line (behind a reverse proxy on the
+same machine the address is `X-Real-IP`). A client presenting the right hash
+and version is always admitted, from a noted address too, since miners behind
+one NAT or reverse proxy share it. When the constant changes at a slot, every
+subscriber on the old version is closed with the same reason at its next
+keepalive. The refusal is a close frame rather than a
+refused upgrade because a websocket client displays the text of a close frame
+and discards the body of a failed upgrade, so even a miner built for another
+ledger shows why it is refused. This keeps miners left running from a stopped
+network off the subscriber slots: they cannot submit a valid transaction on
+the new ledger, but they would hold connections. The ban is not extended by
+retries.
+
+Server-push only; client messages are ignored. Same-origin only. Enabled by
+default — set `api.mining_streaming.disable: true` to turn it off.
+`api.mining_streaming.max_connections` bounds concurrent subscribers (default 50);
+beyond it new connections are refused with close code 1013 (try again later)
+rather than evicting an existing miner. There is no connection TTL: the server
+pings every 30s and drops a connection that has been silent for 75s.
+
+One text-frame message shape:
+
+```json
+{ "txid": "<hex>", "tx_bytes": "<hex>" }
+```
+
+A transit is streamed when the node accepts it — after signature validation and
+persistence, but **before** constraint validation. Its proof of work is
+therefore unverified at this point, and the structure marking it as a mine
+transit is attacker-forgeable. `tx_bytes` is the raw transaction so that the
+client can verify the mine-chain rules itself against the predecessor it tracks;
+`txid` is a convenience derived from those bytes. Do not steer mining on this
+feed without verifying it.
+
+---
+
+## Browser tools (HTML)
+
+The node also serves read-only browser dashboards as HTML pages — `/dashboard`, `/peers`,
+`/dagviz`, `/dag_explorer`, `/chain_explorer`. They are described in
+[`run_access.md`](https://lunfardo314.github.io/#/participate/run_access) (and the testnet ones in [`testnet.md`](https://lunfardo314.github.io/#/participate/testnet)).

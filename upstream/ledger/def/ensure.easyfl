@@ -1,0 +1,220 @@
+// Helpers reading a consumed output by its input index. The `_self*`
+// helpers in the delegate lock are relative to the delegation output
+// itself; here `self` is the tag-along command output, so the delegation
+// has to be addressed explicitly.
+
+// $0 input index
+func _consumedOutputPath : concat(pathToConsumedOutputs, $0)
+
+// $0 input index -> index of the last tuple element of that output
+func _consumedLastConstraintIndex : byte(sub(tupleLenAtPath(_consumedOutputPath($0)), u64/1), 7)
+
+// $0 input index -> last frozen epoch of the delegation at that index.
+// delegateLockState is pinned to the last tuple position.
+func _consumedLastFrozenEpoch :
+   uint8Bytes(parseInlineDataArgument(
+      atPath(concat(_consumedOutputPath($0), _consumedLastConstraintIndex($0))), 0, #delegateLockState))
+
+// $0 input index -> the promille of the projected inflation the target
+// advanced when it froze this delegation, pinned in delegateLockState.
+func _consumedAdvanceShare :
+   uint8Bytes(parseInlineDataArgument(
+      atPath(concat(_consumedOutputPath($0), _consumedLastConstraintIndex($0))), 2, #delegateLockState))
+
+// $0 input index -> target chain ID, index-value tuple position 1
+func _consumedTargetChainID :
+   atTuple8(atPath(concat(_consumedOutputPath($0), indexValuesConstraintIndex)), 1)
+
+// $0 input index of the frozen delegation being stopped
+// -> ceiling for the allowance: uncut chain inflation over the delegation's
+// remaining frozen span, at the share the target actually advanced.
+//
+// Stopping early is an unwind, not a penalty: the target prepaid the
+// delegator for the whole frozen span at that share, so what comes back is
+// the part of the advance the span will no longer earn. Both sides then bear
+// their own foregone inflation - the delegator its yield, the target its cut -
+// and neither compensates the other. Charging the uncut projection instead
+// would price the target's foregone cut as a termination penalty, and that
+// penalty would fall on every add-to-delegation cycle.
+//
+// Measured from the delegation output's OWN slot, not txSlot. The
+// sequencer's compensation is the same quantity measured from txSlot, which
+// shrinks as the frozen span runs out — anchoring the ceiling there would
+// make it drift between the moment the delegator signs the request and the
+// moment the sequencer picks it up, rejecting honest requests. Anchored to
+// the input's slot it is a fixed property of an immutable output, so wallet
+// and constraint compute the identical number. It bounds the true
+// compensation from above at any later slot, which is all a ceiling needs.
+func _lastSlotInFrozenSpan :
+   lastSlotInDelegationEpoch(
+      _consumedTargetChainID($0),
+      _consumedLastFrozenEpoch($0),
+      constDelegationEpochSlots)
+
+// $0 input index -> slots left in the frozen span, 0 if it has run out.
+// The comparison guards the subtraction: an unfrozen delegation carries
+// lastFrozenEpoch 0, which puts the span end before the output's own slot.
+func _remainingFrozenSlots :
+if(
+   lessThan(_lastSlotInFrozenSpan($0), uint8Bytes(slotOfInputByIndex($0))),
+   u64/0,
+   add(sub(_lastSlotInFrozenSpan($0), slotOfInputByIndex($0)), u64/1)
+)
+
+func _projectedCompensation :
+_takeCut(
+   chainInflationMultiStep(
+      tokenBalanceByOutputPath(_consumedOutputPath($0)),
+      slotOfInputByIndex($0),
+      _remainingFrozenSlots($0)
+   ),
+   _consumedAdvanceShare($0)
+)
+
+// index of the produced delegation successor named by the unlock parameters
+func _stopDelegationSuccessorChainConstraint :
+   producedConstraintByIndex(concat(selfUnlockParameters, chainConstraintIndex))
+
+// input index of the consumed delegation, read off the successor's chain constraint
+func _stopDelegationPredecessorIndex :
+   parseInlineDataArgument(_stopDelegationSuccessorChainConstraint, 1, #chain)
+
+// $0 delegation chain ID
+// $1 allowance
+func _ensureStopDelegation :
+and(
+  require(
+	 equal(
+		parseInlineDataArgument(_stopDelegationSuccessorChainConstraint, 0, #chain),
+		$0
+	 ),
+	 !!!ensureStopDelegation:_delegationID_is_wrong
+  ),
+  require(
+	 equal(
+		parseInlineDataArgument(producedConstraintByIndex(concat(selfUnlockParameters, 4)), 1, #delegateLockState),
+		2 // 2 means on hold
+	),
+	!!!ensureStopDelegation:_delegation_produced_state_is_not_on_hold
+  ),
+  // The allowance may not exceed what the sequencer actually loses, so an
+  // oversized value cannot be used to drain the delegation whatever the
+  // wallet computed. Skipped when 0 — the no-allowance path then costs
+  // nothing and behaves exactly as before.
+  or(
+     isZero($1),
+     require(
+        lessOrEqualThan(uint8Bytes($1), _projectedCompensation(_stopDelegationPredecessorIndex)),
+        !!!ensureStopDelegation:_allowance_exceeds_projected_compensation
+     )
+  )
+)
+
+// $0 delegation chain ID
+// $1 allowance: maximum the target sequencer may take out of the delegation
+//    balance in this transaction. 0 (or absent) means none, and the
+//    delegation's non-decrease rule applies unchanged.
+//
+// Checks unlock conditions. Conditions are satisfied when unlock data is one byte with the number of
+// produced output that is delegation output with the given delegation chain ID and it is 'on hold''
+//
+// This constraint script is attached to the sequencer command.
+// Its purpose is to enforce real revocation of the delegation by the sequencer.
+// On a tagAlong output it binds only while the target can consume the output,
+// i.e. inside constTagAlongSlots; from then on the tag-along lock hands the
+// output back to its sender, and later to anybody, and a constraint that kept
+// demanding the revocation would make the sender's own reclaim impossible.
+//
+// The delegate lock reads $1 off this constraint to size the permitted
+// balance decrease; see _decreaseWithinAllowance there.
+func ensureStopDelegation :
+or(
+   and(
+      selfIsProducedOutput,
+      require(
+        equal(len($0), u64/24),
+        !!!wrong_chain_id
+      ),
+      require(
+        lessOrEqualThan(len($1), u64/8),
+        !!!ensureStopDelegation:_allowance_must_be_at_most_8_bytes
+      )
+   ),
+   and(
+      selfIsConsumedOutput,
+      if(
+         selfHasLockType(#tagAlong),
+         or(
+            greaterOrEqualThan(selfInputSlotPace, constTagAlongSlots),
+            _ensureStopDelegation($0, $1)
+         ),
+         _ensureStopDelegation($0, $1)
+      )
+   )
+)
+
+// ---- ensureTopUpDelegation ----
+//
+// $0 delegation chain ID
+//
+// Attached at element 4 of a top-up request: a tag-along to the delegation's
+// target whose whole balance is to be added to the delegation. Unlock data is
+// one byte, the index of the produced delegation successor. The successor
+// must be this delegation, marked frozen, and its predecessor's lock must
+// have been unlocked with a third byte naming this very output. That is the
+// delegate lock's top-up path, on which the successor balance must equal the
+// predecessor plus inflation plus this output's balance plus the advance on
+// the newly frozen amount (_validInflationAdvanceProduced there). So delivery
+// and the advance are enforced by the delegate lock; this constraint only
+// forces the sequencer onto that path, and a request consumed any other way
+// fails here.
+//
+// Like ensureStopDelegation it binds only while the target can consume the
+// output; from constTagAlongSlots on the tag-along lock hands the output back
+// to its sender.
+
+func _topUpSuccessorPath : producedOutputPathByIndex(byte(selfUnlockParameters, 0))
+func _topUpSuccessorChainConstraint : atPath(concat(_topUpSuccessorPath, chainConstraintIndex))
+func _topUpSuccessorState : atPath(concat(_topUpSuccessorPath, byte(sub(tupleLenAtPath(_topUpSuccessorPath), u64/1), 7)))
+func _topUpPredecessorIndex : parseInlineDataArgument(_topUpSuccessorChainConstraint, 1, #chain)
+func _topUpPredecessorLockUnlock : unlockParamsByConstraintIndex(concat(_topUpPredecessorIndex, lockConstraintIndex))
+
+// $0 delegation chain ID
+func _ensureTopUpDelegation :
+and(
+  require(
+     equal(parseInlineDataArgument(_topUpSuccessorChainConstraint, 0, #chain), $0),
+     !!!ensureTopUpDelegation:_delegationID_is_wrong
+  ),
+  require(
+     equal(parseInlineDataArgument(_topUpSuccessorState, 1, #delegateLockState), 1),
+     !!!ensureTopUpDelegation:_delegation_successor_is_not_frozen
+  ),
+  require(
+     and(
+        equal(len(_topUpPredecessorLockUnlock), u64/3),
+        equal(byte(_topUpPredecessorLockUnlock, 2), selfOutputIndex)
+     ),
+     !!!ensureTopUpDelegation:_delegation_must_be_unlocked_with_a_reference_to_the_request
+  )
+)
+
+// $0 delegation chain ID
+func ensureTopUpDelegation :
+or(
+   and(
+      selfIsProducedOutput,
+      require(equal(len($0), u64/24), !!!wrong_chain_id)
+   ),
+   and(
+      selfIsConsumedOutput,
+      if(
+         selfHasLockType(#tagAlong),
+         or(
+            greaterOrEqualThan(selfInputSlotPace, constTagAlongSlots),
+            _ensureTopUpDelegation($0)
+         ),
+         _ensureTopUpDelegation($0)
+      )
+   )
+)

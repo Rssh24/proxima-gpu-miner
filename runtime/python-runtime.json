@@ -1,0 +1,7 @@
+{
+  "version": "3.13.7",
+  "architecture": "amd64",
+  "url": "https://www.python.org/ftp/python/3.13.7/python-3.13.7-embed-amd64.zip",
+  "sha256": "f6cca216a359be84797cabb54149ce5e062afb16cc7567eb7fc51cacb2d86b65",
+  "source_url": "https://www.python.org/ftp/python/3.13.7/Python-3.13.7.tar.xz"
+}

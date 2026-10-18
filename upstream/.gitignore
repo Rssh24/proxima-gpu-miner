@@ -1,0 +1,45 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Locally compiled binaries. Not '/proxi', which would also ignore the proxi/
+# source package and hide new files in it from git.
+/proxima
+/proxi/proxi
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+/proximadb/
+/proximadb.txstore/
+.vscode/launch.json
+tests/node-docker-setup/data
+kb/big_tasks.md
+# Test output files
+*.gv
+.internal/
+# Claude Code local tooling state (settings.local.json, session/memory data, locks, worktrees)
+.claude/
+# Keys, wallet and node configs anywhere in the tree; only the test fixtures are tracked.
+*.key
+proxima.yaml
+proxi.yaml
+!tests/docker/**/proxima.key
+!tests/docker/**/proxima.yaml
+!tests/docker/**/proxi.yaml
+!tests/nodes/**/proxima.yaml
+!tests/nodes/**/proxi.yaml

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Proxima — network connectivity</title>
+<link rel="icon" href="%FAVICON%">
+<style>
+  html,body { margin:0; height:100%; background:#0e1116; color:#c9d1d9;
+              font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,monospace; }
+  #c { display:block; width:100vw; height:100vh; cursor:grab; }
+  #c.dragging { cursor:grabbing; }
+  #hud { position:fixed; top:12px; left:12px; font-size:12px; line-height:1.5;
+         background:rgba(22,27,34,.82); border:1px solid #30363d; border-radius:8px;
+         padding:10px 12px; pointer-events:none; max-width:280px; }
+  /* the HUD lets mouse events through to the canvas; the toggle must catch them */
+  #hud label { pointer-events:auto; cursor:pointer; }
+  #hud input { vertical-align:middle; margin:0 5px 0 0; }
+  #hud input[type=range] { width:110px; margin:0 0 0 6px; accent-color:#5b8db8; }
+  /* The lockup is inlined, so the rule has to sit on the svg itself to beat the
+     width/height/color presentation attributes it carries for standalone use. */
+  #hud .brand svg { display:block; width:150px; height:auto; color:#e8edf2; margin-bottom:2px; }
+  #hud b { color:#e8edf2; }
+  #legend { margin-top:8px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  #tip { position:fixed; pointer-events:none; display:none; background:rgba(22,27,34,.96);
+         border:1px solid #30363d; border-radius:6px; padding:6px 9px; font-size:12px; line-height:1.45;
+         box-shadow:0 4px 14px rgba(0,0,0,.5); white-space:nowrap; }
+  #tip .nm { color:#e8edf2; font-weight:600; }
+  .muted { color:#8b949e; }
+  #err { color:#f85149; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div class="brand"><!--LOGO--></div>
+  <div><b>Network connectivity</b></div>
+  <div id="meta" class="muted">loading…</div>
+  <div id="err"></div>
+  <div id="legend">
+    <div><span class="dot" style="background:#e8993a"></span>sequencer</div>
+    <div><span class="dot" style="background:#5b8db8"></span>access node</div>
+    <div><span class="dot" style="background:#0e1116;border:2px solid #34d058;width:8px;height:8px"></span>this node (self)</div>
+    <div><span class="dot" style="background:transparent;border:1px dashed #ffffff;width:8px;height:8px"></span>capital centre of mass · ring holds ⅔ of capital (≈ RTT)</div>
+    <div style="margin-top:4px"><span style="display:inline-block;width:14px;border-top:1px solid #f0b26e;vertical-align:middle;margin-right:6px"></span>seq ↔ seq (consensus backbone)</div>
+    <div><span style="display:inline-block;width:14px;border-top:1px solid #aac8e8;vertical-align:middle;margin-right:6px"></span>other links · brightness ∝ proximity (RTT)</div>
+    <div style="margin-top:4px"><label><input type="checkbox" id="sizeByCapital">size ∝ √capital</label></div>
+    <div><label><input type="checkbox" id="showIds">node ids</label></div>
+    <div><label><input type="checkbox" id="showCenter">centre of mass</label></div>
+    <div><label>node size<input type="range" id="sizeFactor" min="0.1" max="1" step="0.05"></label></div>
+    <div><label>zoom<input type="range" id="zoom" min="0" max="1" step="0.01"></label></div>
+    <div class="muted">drag nodes · drag background to pan · scroll to zoom · auto-refresh 15s</div>
+  </div>
+</div>
+<div id="tip"></div>
+<script>
+"use strict";
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const metaEl = document.getElementById('meta'), errEl = document.getElementById('err'), tip = document.getElementById('tip');
+const sizeCb = document.getElementById('sizeByCapital'), idsCb = document.getElementById('showIds');
+const centerCb = document.getElementById('showCenter');
+const sizeSl = document.getElementById('sizeFactor'), zoomSl = document.getElementById('zoom');
+
+// physics params
+// SPRING_TOTAL is the summed stiffness of all springs on one node, split evenly
+// among its N-1 partners: a fixed per-spring constant grows with the node count
+// until the explicit integration goes unstable and the nodes never settle.
+// GRAVITY: weak pull to the canvas centre; it bounds a node that has no measured
+// path to anyone (springs only act along paths) and keeps the graph framed.
+const SPRING_TOTAL = 0.2, REPULSE = 1400, GRAVITY = 0.003, DAMP = 0.82, MAXV = 28;
+let W = 0, H = 0, DPR = 1;
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W*DPR; cv.height = H*DPR; cv.style.width = W+'px'; cv.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize); resize();
+
+// graph state
+let nodes = [];                 // {name, contrib, isSeq, isSelf, x,y,vx,vy,r, fixed}
+let byName = new Map();         // name -> node
+let D = [];                     // full symmetric distance matrix (us); 0 = no path
+let maxD = 1, maxContrib = 1;
+let center = null;              // capital centre of mass in layout space: {x,y,R} (R = px radius enclosing 2/3 of capital)
+let restSpan = 1;               // px span mapped to maxD
+
+// node radius: sequencers scale with sqrt(capital) when the toggle is on, otherwise
+// every node is drawn the same size; the size slider scales both by a factor
+// in (0,1], 1 being the full size. Both choices are remembered in the browser.
+try { sizeCb.checked = localStorage.getItem('netviz.sizeByCapital') !== '0'; } catch(e) { sizeCb.checked = true; }
+try { sizeSl.value = localStorage.getItem('netviz.sizeFactor') || '1'; } catch(e) { sizeSl.value = '1'; }
+function radius(n){
+  const c = parseFloat(sizeSl.value) || 1;
+  if(!sizeCb.checked) return c*4.5;
+  return c*(n.contrib>0 ? 5 + 13*Math.sqrt(n.contrib/maxContrib) : 3.5);
+}
+function resizeNodes(){ for(const n of nodes) n.r = radius(n); }
+sizeCb.addEventListener('change', ()=>{
+  try { localStorage.setItem('netviz.sizeByCapital', sizeCb.checked ? '1' : '0'); } catch(e) {}
+  resizeNodes();
+});
+sizeSl.addEventListener('input', ()=>{
+  try { localStorage.setItem('netviz.sizeFactor', sizeSl.value); } catch(e) {}
+  resizeNodes();
+});
+// node ids under the dots are hidden by default; the tooltip always shows the full name
+try { idsCb.checked = localStorage.getItem('netviz.showIds') === '1'; } catch(e) { idsCb.checked = false; }
+idsCb.addEventListener('change', ()=>{
+  try { localStorage.setItem('netviz.showIds', idsCb.checked ? '1' : '0'); } catch(e) {}
+});
+// centre of mass marker, shown by default
+try { centerCb.checked = localStorage.getItem('netviz.showCenter') !== '0'; } catch(e) { centerCb.checked = true; }
+centerCb.addEventListener('change', ()=>{
+  try { localStorage.setItem('netviz.showCenter', centerCb.checked ? '1' : '0'); } catch(e) {}
+});
+
+// view transform: screen(css) = scale*world + (panX,panY); mouse-wheel zoom
+let scale = 1, panX = 0, panY = 0;
+const MIN_SCALE = 0.2, MAX_SCALE = 6;
+function toWorld(sx,sy){ return { x:(sx-panX)/scale, y:(sy-panY)/scale }; }
+// setZoom rescales about the given screen point (that world point stays put)
+function setZoom(ns, sx, sy){
+  ns = Math.max(MIN_SCALE, Math.min(MAX_SCALE, ns));
+  const w = toWorld(sx, sy);
+  scale = ns;
+  panX = sx - scale*w.x; panY = sy - scale*w.y;
+  zoomSl.value = Math.log(scale/MIN_SCALE)/Math.log(MAX_SCALE/MIN_SCALE);  // slider is log-scaled
+}
+// zoom slider (for touch screens without a wheel): zooms about the canvas centre
+zoomSl.value = Math.log(1/MIN_SCALE)/Math.log(MAX_SCALE/MIN_SCALE);
+zoomSl.addEventListener('input', ()=>{
+  setZoom(MIN_SCALE*Math.pow(MAX_SCALE/MIN_SCALE, parseFloat(zoomSl.value)), W/2, H/2);
+});
+
+function humanT(v){
+  if(!v) return '0';
+  const u = [['T',1e12],['G',1e9],['M',1e6],['k',1e3]];
+  for(const [s,d] of u){ if(v>=d) return (v/d).toFixed(v/d<10?2:1)+s; }
+  return ''+v;
+}
+function shortName(n){ return n.slice(0,6)+'…'; }
+
+// build full symmetric matrix from packed upper triangle
+function unpack(m){
+  const N = m.nodes.length, d = Array.from({length:N},()=>new Array(N).fill(0));
+  for(let i=0;i<N;i++) for(let k=0;k<m.matrix[i].length;k++){
+    const j = i+1+k, v = m.matrix[i][k]; d[i][j]=v; d[j][i]=v;
+  }
+  return d;
+}
+
+function ingest(m){
+  const N = m.nodes.length;
+  D = unpack(m);
+  maxD = 1; for(let i=0;i<N;i++) for(let j=i+1;j<N;j++) if(D[i][j]>maxD) maxD=D[i][j];
+  maxContrib = Math.max(1, ...m.contribution);
+  restSpan = 0.42*Math.min(W,H);
+
+  const next = [], nb = new Map();
+  for(let i=0;i<N;i++){
+    const name = m.nodes[i], contrib = m.contribution[i]||0;
+    const old = byName.get(name);
+    const n = old || { name, x: W/2 + (Math.random()-.5)*200, y: H/2 + (Math.random()-.5)*200, vx:0, vy:0, fixed:false };
+    n.idx = i; n.contrib = contrib; n.isSeq = contrib>0; n.isSelf = (name===m.self);
+    n.r = radius(n);
+    next.push(n); nb.set(name, n);
+  }
+  nodes = next; byName = nb;
+
+  const cap = m.captured_at ? new Date(m.captured_at/1e6) : null;
+  const nSeq = m.contribution.filter(c=>c>0).length;
+  metaEl.innerHTML = `self <b>${m.self||'?'}</b><br>${N} nodes · ${nSeq} seq · ${N-nSeq} access`
+                   + (cap?`<br><span class="muted">captured ${cap.toLocaleTimeString()}</span>`:'');
+  errEl.textContent = '';
+}
+
+// centerOfMass is the capital-weighted Fermat-Weber point of the layout (the
+// intuitive form of the centre in kb/research/tick_duration.md): the point
+// minimising the capital-weighted sum of distances to the sequencers. It is a
+// free point, not a node. A few Weiszfeld iterations per frame, started from the
+// previous position, track the slowly moving layout. R is the layout radius
+// around it enclosing two thirds of total capital.
+function centerOfMass(prev){
+  const seq = nodes.filter(n=>n.contrib>0);
+  const total = seq.reduce((s,n)=>s+n.contrib, 0);
+  if(!total) return null;
+  let x = prev ? prev.x : seq.reduce((s,n)=>s+n.x*n.contrib,0)/total;
+  let y = prev ? prev.y : seq.reduce((s,n)=>s+n.y*n.contrib,0)/total;
+  for(let it=0; it<5; it++){
+    let sx=0, sy=0, sw=0;
+    for(const n of seq){
+      const w = n.contrib/Math.max(0.5, Math.hypot(n.x-x, n.y-y));
+      sx += w*n.x; sy += w*n.y; sw += w;
+    }
+    x = sx/sw; y = sy/sw;
+  }
+  const byDist = seq.map(n=>({d:Math.hypot(n.x-x,n.y-y), m:n.contrib})).sort((a,b)=>a.d-b.d);
+  let acc=0, R=0;
+  for(const r of byDist){ acc += r.m; R = r.d; if(acc>=total*2/3) break; }
+  return {x, y, R};
+}
+// layout px -> approximate RTT us (springs put nodes at (d/maxD)*restSpan)
+function pxToUs(px){ return px*maxD/restSpan; }
+
+async function refresh(){
+  try{
+    const r = await fetch('/api/v1/get_connectivity_matrix', {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const m = await r.json();
+    if(m.error){ throw new Error(m.error); }
+    if(!m.nodes || !m.nodes.length){ errEl.textContent='connectivity map empty'; return; }
+    ingest(m);
+  }catch(e){ errEl.textContent = 'fetch failed: '+e.message; }
+}
+
+// one physics step (all-pairs springs at metric rest length + mild repulsion)
+function step(){
+  const N = nodes.length, springK = SPRING_TOTAL/Math.max(1, N-1);
+  for(let i=0;i<N;i++){
+    const a = nodes[i]; if(a.fixed) continue;
+    let fx = -GRAVITY*(a.x-W/2), fy = -GRAVITY*(a.y-H/2);
+    for(let j=0;j<N;j++){
+      if(i===j) continue;
+      const b = nodes[j];
+      let dx = a.x-b.x, dy = a.y-b.y, dist = Math.hypot(dx,dy);
+      if(dist<0.01){ dx=(Math.random()-.5); dy=(Math.random()-.5); dist=Math.hypot(dx,dy)+0.01; }
+      const ux = dx/dist, uy = dy/dist;
+      // repulsion (short-to-mid range), capped
+      fx += ux * Math.min(REPULSE/(dist*dist), 4);
+      fy += uy * Math.min(REPULSE/(dist*dist), 4);
+      // spring toward metric rest length (only when a path exists)
+      const dij = D[a.idx][b.idx];
+      if(dij>0){
+        const rest = (dij/maxD)*restSpan;
+        const f = springK*(dist-rest)/dist;  // attractive when too far
+        fx -= f*dx; fy -= f*dy;
+      }
+    }
+    a.vx = (a.vx+fx)*DAMP; a.vy = (a.vy+fy)*DAMP;
+    a.vx = Math.max(-MAXV,Math.min(MAXV,a.vx)); a.vy = Math.max(-MAXV,Math.min(MAXV,a.vy));
+    a.x += a.vx; a.y += a.vy;
+  }
+}
+
+function draw(){
+  // clear in device space, then apply DPR + view transform so the graph zooms/pans
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.setTransform(DPR*scale,0,0,DPR*scale, DPR*panX, DPR*panY);
+  const N = nodes.length;
+  // edges: one screen pixel wide at any zoom (the transform scales widths, so
+  // divide it out); brightness varies with proximity (1 - d/maxD) and stays
+  // readable (high alpha floor). sequencer<->sequencer links (the consensus
+  // backbone) are amber so they stand out even when cross-region/high-latency.
+  ctx.lineWidth = 1/scale;
+  for(let i=0;i<N;i++) for(let j=i+1;j<N;j++){
+    const dij = D[nodes[i].idx][nodes[j].idx]; if(dij<=0) continue;
+    const prox = 1 - dij/maxD;
+    const bothSeq = nodes[i].isSeq && nodes[j].isSeq;
+    ctx.strokeStyle = bothSeq ? `rgba(240,178,110,${(0.6 + 0.35*prox).toFixed(3)})`
+                              : `rgba(170,200,232,${(0.28 + 0.45*prox).toFixed(3)})`;
+    ctx.beginPath(); ctx.moveTo(nodes[i].x,nodes[i].y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.stroke();
+  }
+  // centre of mass: dotted circle enclosing 2/3 of capital, drawn under the
+  // nodes; the centre dot and label come after the nodes so nothing covers them.
+  center = centerCb.checked ? centerOfMass(center) : null;
+  if(center){
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.setLineDash([2/scale, 4/scale]); ctx.lineWidth = 1/scale;
+    ctx.beginPath(); ctx.arc(center.x,center.y,center.R,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // nodes
+  for(const n of nodes){
+    ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+    ctx.fillStyle = n.isSeq ? '#e8993a' : '#5b8db8';
+    ctx.fill();
+    if(n.isSelf){ ctx.lineWidth=2; ctx.strokeStyle='#34d058'; ctx.stroke(); }
+    // labels: optional id, then capital for sequencers
+    ctx.font = '5.5px monospace'; ctx.textAlign='center';
+    let ly = n.y+n.r+6;
+    if(idsCb.checked){ ctx.fillStyle = '#c9d1d9'; ctx.fillText(shortName(n.name), n.x, ly); ly += 6; }
+    if(n.isSeq){ ctx.fillStyle='#e8b87a'; ctx.fillText(humanT(n.contrib), n.x, ly); }
+  }
+  if(center){
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#0e1116'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(center.x,center.y,3,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.font = '5.5px monospace'; ctx.textAlign='left';
+    ctx.fillText(`⅔ capital ≈ ${(pxToUs(center.R)/1000).toFixed(1)} ms`, center.x+center.R*0.72+3, center.y-center.R*0.72-3);
+  }
+}
+
+function frame(){ step(); draw(); requestAnimationFrame(frame); }
+
+// interaction: drag nodes, pan canvas, hover tooltip
+let drag = null;       // node being dragged
+let pan = null;        // {x,y} last screen position while panning the canvas
+function pick(mx,my){
+  let best=null, bd=1e9;
+  for(const n of nodes){ const d=Math.hypot(n.x-mx,n.y-my); if(d<n.r+6 && d<bd){ bd=d; best=n; } }
+  return best;
+}
+cv.addEventListener('mousedown', e=>{
+  const w=toWorld(e.clientX,e.clientY); const n=pick(w.x,w.y);
+  if(n){ drag=n; n.fixed=true; cv.classList.add('dragging'); }
+  else { pan={x:e.clientX,y:e.clientY}; cv.classList.add('dragging'); }  // empty space: pan the whole graph
+});
+window.addEventListener('mouseup', ()=>{
+  if(drag){ drag.fixed=false; drag=null; }
+  pan=null; cv.classList.remove('dragging');
+});
+cv.addEventListener('mousemove', e=>{
+  const mx=e.clientX, my=e.clientY, w=toWorld(mx,my);
+  if(pan){ panX+=mx-pan.x; panY+=my-pan.y; pan.x=mx; pan.y=my; tip.style.display='none'; return; }
+  if(drag){ drag.x=w.x; drag.y=w.y; drag.vx=0; drag.vy=0; }
+  const n = drag || pick(w.x,w.y);
+  if(n){
+    // nearest measured neighbour latency
+    let mn=Infinity; for(let j=0;j<nodes.length;j++){ const d=D[n.idx][nodes[j].idx]; if(d>0&&d<mn) mn=d; }
+    tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my+14)+'px';
+    const dc = (center && n.isSeq) ? `<br><span class="muted">from centre of mass ≈ ${(pxToUs(Math.hypot(n.x-center.x,n.y-center.y))/1000).toFixed(1)} ms</span>` : '';
+    tip.innerHTML = `<span class="nm">${n.name}</span>${n.isSelf?' <span style="color:#34d058">(self)</span>':''}<br>`
+      + (n.isSeq?`sequencer · capital ${humanT(n.contrib)}`:'access node') + dc
+      + (isFinite(mn)?`<br><span class="muted">nearest peer ${(mn/1000).toFixed(2)} ms</span>`:'');
+  } else { tip.style.display='none'; }
+});
+
+// mouse-wheel zoom, anchored at the cursor (keep the world point under the cursor fixed)
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  setZoom(scale * Math.exp(-e.deltaY*0.0015), e.clientX, e.clientY);
+}, {passive:false});
+
+refresh(); setInterval(refresh, 15000); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

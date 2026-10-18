@@ -1,0 +1,164 @@
+// sequencer(coverageDelta)
+//
+// Marker constraint that turns a chain output into a sequencer chain.
+//
+//   $0 coverageDelta      (z64): the ledger coverage delta of this milestone's past cone.
+//
+// It used to also carry per-chain delegation parameters (epoch length and
+// freeze depth). Those are ledger constants now — identical for every
+// sequencer — so the constraint carries only the per-milestone coverage.
+// Once a chain is a sequencer chain it cannot lose that status; only chain
+// destruction is possible, and a regular chain can never gain one later.
+//
+// coverageDelta is NOT immutable: it carries this milestone's coverage
+// delta, computed and pinned by the attacher (same value the branch's stem
+// reads for its total-coverage recurrence). On the ledger it is constrained to
+// be strictly increasing over a same-slot chain predecessor (see
+// _sameSlotPredecessorCase). Branches and slot-first milestones have a
+// cross-slot predecessor and are therefore exempt; chain origins have no
+// predecessor.
+//
+// The sibling chain constraint is always at index 2; the sequencer constraint
+// sits at sequencerConstraintIndex (index 4). The position is pinned on the
+// produced side and re-read at the fixed index on the successor.
+
+// $0 chain predecessor input index
+func _inputSameSlot : equal( txSlot, slotOfInputByIndex($0) )
+
+// $0 chain predecessor input index. coverageDelta = arg 0 of the predecessor
+// milestone's sequencer constraint (a sequencer chain output always carries it).
+func _predCoverageDelta : parseInlineDataArgument(atPath(concat(pathToConsumedOutputs, $0, sequencerConstraintIndex)), 0, #sequencer)
+
+// $0 chain predecessor input index. True iff the predecessor milestone is a
+// branch (tick == 0). A branch resets the baseline.
+func _predIsBranch : isZero(tickFromTimestampBytes(timestampOfInputByIndex($0)))
+
+// $0 chain predecessor input index. The coverage value the successor must
+// STRICTLY exceed:
+//   - the predecessor's own coverageDelta, when the predecessor is a same-slot,
+//     non-branch milestone (same baseline, same within-slot accumulation);
+//   - 0 otherwise.
+// The "0" arm covers every baseline-reset point: cross-slot predecessor
+// (slot-first milestone, explicit baseline), branch SELF (its chain predecessor
+// is always cross-slot), and a same-slot BRANCH predecessor (the post-branch
+// first milestone, whose accumulation restarts on the new baseline). In all
+// those cases the successor just needs to consolidate SOME coverage (> 0).
+//
+// Within a slot the baseline never switches to a different branch (same-slot
+// branches are conflicts; two branches in one past cone share a lineage), so a
+// same-slot non-branch predecessor always shares the successor's baseline and
+// the two coverageDeltas are comparable.
+func _effectivePredCoverage :
+if(
+	and(_inputSameSlot($0), not(_predIsBranch($0))),
+	_predCoverageDelta($0),
+	u64/0
+)
+
+// $0 chain predecessor input index, $1 self coverageDelta
+// Unified anti-spam rule: every (non-origin) milestone must consolidate strictly
+// more coverage than its effective predecessor — via new consumed (tag-along)
+// outputs or a new endorsement. A milestone that only inflates without
+// consolidating coverage is invalid. Gated by constEnforceCoverageDeltaMonotonicity
+// (production = on; certain hand-built attacher tests turn it off).
+func _enforceCoverageAdvance :
+or(
+	not(constEnforceCoverageDeltaMonotonicity),
+	require(
+		lessThan(uint8Bytes(_effectivePredCoverage($0)), uint8Bytes($1)),
+		!!!coverage_delta_must_strictly_increase
+	)
+)
+
+// $0 chain predecessor input index
+// chain predecessor is on the same slot
+func _sameSlotPredecessorCase :
+require(
+	or(sequencerFlagON(inputIDByIndex($0)), not(isZero(numEndorsements))),
+	!!!sequencer_chain_predecessor_on_the_same_slot_must_be_either_a_sequencer_tx_too_or_endorse_another_sequencer_tx
+)
+
+// $0 chain predecessor input index
+// chain predecessor is on a past slot
+func _crossSlotPredecessorCase :
+require(
+	or(
+		isBranchTransaction,
+		not(isZero(numEndorsements)),
+		not(isZero(txExplicitBaseline))
+	),
+	!!!sequencer_tx_has_incorrect_cross_slot_chain_predecessor_or_does_not_have_any_endorsements
+)
+
+// $0 chain predecessor input index
+//
+// Chain ORIGIN outputs ($0 == 0x, equivalently ChainID == 0x000…) have no
+// tx-level requirement: the producing tx is a regular wallet tx (or another
+// sequencer milestone spawning new chains) and baseline anchoring is the
+// consumer's problem. Chain TRANSITIONS still dispatch to the
+// baseline guarantee rules. Baseline direction will be possible to chose deterministically:
+// - if predecessor is on the same slot, it must either be sequencer tx (it is the direction),
+//   or otherwise it must have at least 1 endorsement (baseline direction is at index 0).
+// - otherwise (cross slot predecessor case):
+// -- on branch transaction baseline direction is itself
+// -- otherwise endorsement at index 0 is the direction
+// -- otherwise explicit baseline must be specified
+// $0 chain predecessor input index, $1 self coverageDelta
+func _sequencer :
+or(
+	equal($0, 0x),
+	and(
+		if(
+		  _inputSameSlot($0),
+		  _sameSlotPredecessorCase($0),
+		  _crossSlotPredecessorCase
+		),
+		_enforceCoverageAdvance($0, $1)
+	)
+)
+
+// enforces the sequencer transaction with more than 1 input not is in the pre branch consolidation ticks zone
+// Checks: txTick <= constMaxTickValuePerSlot - constPreBranchConsolidationTicks
+func checkPreBranchConsolidationTicks :
+or(
+   equal(numInputs, u64/1),
+   require(
+		lessOrEqualThan(
+			uint8Bytes(txTick),
+			sub(
+				constMaxTickValuePerSlot,
+				constPreBranchConsolidationTicks
+			)
+        ),
+        !!!sequencer_transaction_violates_pre-branch_consolidation_ticks_constraint
+   )
+)
+
+// $0 - coverageDelta (z64)
+// chain constraint is always at index 2; this constraint is at sequencerConstraintIndex
+//
+// The "self is the tx's milestone output" check (selfOutputIndex == txSequencerOutputIndex)
+// fires only for chain TRANSITIONS, never for chain ORIGINS. Rationale: a single tx is
+// allowed to produce many new sequencer chain origins (a wallet "batch-spawn", or a
+// sequencer milestone spawning new chains on request). Transitions remain capped at one
+// per tx by the single-byte txSequencerOutputIndex marker.
+func sequencer: and(
+    or(
+        and(
+            selfIsProducedOutput,
+            // pin the constraint position so successors and the stem can read it
+            // at the fixed index.
+            require(equal(selfBlockIndex, sequencerConstraintIndex), !!!sequencer_constraint_must_be_at_sequencerConstraintIndex),
+            // selfChainPredInputIndex == 0x => chain origin output (no transition check needed).
+            or(
+                equal(selfChainPredInputIndex, 0x),
+                require(equal(selfOutputIndex, txSequencerOutputIndex), !!!inconsistent_sequencer_output_index_on_transaction)
+            ),
+            checkPreBranchConsolidationTicks,
+            // check chain's past ($0 = this milestone's coverageDelta, used by
+            // the within-slot strict-increase rule)
+            _sequencer( selfChainPredInputIndex, $0 )
+        ),
+        selfIsConsumedOutput
+    )
+)

@@ -1,0 +1,92 @@
+version: '3'
+services:
+  node0:
+    build:
+      context: ../..
+      dockerfile: tests/docker/dockerfile
+    container_name: node0
+    image: proxima:latest    
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+      - "9500:9500"
+    environment:
+      - DEBUG=true
+    networks:
+      proxima_network:
+        ipv4_address: 172.16.238.10
+    command: ["./start.sh", "boot"]
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+  node1:
+    container_name: node1
+    image: proxima:latest    
+    ports:
+      - "8001:8000"
+    environment:
+      - DEBUG=true
+    depends_on:
+      - node0
+    networks:
+      proxima_network:
+        ipv4_address: 172.16.238.11
+    command: ["./start.sh", "1"]
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+  node2:
+    container_name: node2
+    image: proxima:latest    
+    ports:
+      - "8002:8000"
+    environment:
+      - DEBUG=true
+    depends_on:
+      - node0
+    networks:
+      proxima_network:
+        ipv4_address: 172.16.238.12
+    command: ["./start.sh", "2"]
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+  node3:
+    container_name: node3
+    image: proxima:latest    
+    ports:
+      - "8003:8000"
+    environment:
+      - DEBUG=true
+    depends_on:
+      - node0
+    networks:
+      proxima_network:
+        ipv4_address: 172.16.238.13
+    command: ["./start.sh", "3"]
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+  node4:
+    container_name: node4
+    image: proxima:latest    
+    ports:
+      - "8004:8000"
+    environment:
+      - DEBUG=true
+    depends_on:
+      - node0
+    networks:
+      proxima_network:
+        ipv4_address: 172.16.238.14
+    command: ["./start.sh", "4"]
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+
+
+networks:
+  proxima_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.238.0/24

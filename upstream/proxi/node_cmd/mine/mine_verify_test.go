@@ -1,0 +1,391 @@
+package mine
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/lunfardo314/easyfl"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/lunfardo314/proxima/proxi/glb"
+	"github.com/lunfardo314/proxima/util/vrf"
+	"github.com/stretchr/testify/require"
+)
+
+// Verification of streamed transits. The node relays mine transits it has NOT
+// constraint-validated, so anything the miner steers on has to be re-derived
+// from the raw bytes. These tests mine a genuine transit and then check that
+// each rule actually rejects a transit violating it — a verifier that silently
+// accepted would hand any attacker every miner's hashrate for free.
+
+// The verifier needs a real EasyFL library. In the miner it comes from the node
+// over the API; here the test-ledger singleton stands in for that, converted
+// through the same JSON round trip the wallet uses. Difficulty is pinned low so
+// the fixture can actually solve a transit.
+func init() {
+	ledger.InitWithTestingLedgerData(
+		ledger.WithMineDifficulty(6, 4, 10, 1),
+		ledger.WithMineHardenAfter(2),
+	)
+}
+
+// verifyFixture is a real predecessor plus everything needed to mine on it.
+type verifyFixture struct {
+	m    *miner
+	pred *mineTip
+}
+
+// newVerifyFixture builds a wallet library and constants from the ledger
+// singleton (the same route proxi takes from the node over the API) and
+// synthesises a predecessor mine output to build transits on.
+func newVerifyFixture(t *testing.T, predB uint64) *verifyFixture {
+	t.Helper()
+
+	l := ledger.L(base.MaxSlot)
+	desc, err := easyfl.ReadLibraryFromJSON(easyfl.ToJSON(l.Library, true, false))
+	require.NoError(t, err)
+	lib, err := txbuildercore.NewLibrary(desc)
+	require.NoError(t, err)
+	consts := ledger.ConstantsFromLibrary(l.Library)
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	var seqID base.ChainID
+	seqID[0] = 0xAB
+
+	m := &miner{
+		consts:        consts,
+		lib:           lib,
+		holderID:      base.HolderIDFromED25519PrivateKey(priv),
+		tagAlongSeqID: seqID,
+		fee:           consts.MineTagAlongFee,
+		workers:       1,
+		wallet:        glb.WalletData{PrivateKey: priv},
+	}
+	m.prover, err = vrf.NewProver(priv)
+	require.NoError(t, err)
+
+	// A predecessor mine output at a real (non-genesis) slot so the retarget is
+	// live rather than held. The slot sits in the flat phase of the emission
+	// schedule, so A throughout this fixture is exactly MineAmountBase.
+	const predSlot = uint32(1000)
+	pred := makeMineOutput(t, lib, consts, mineOutputParams{
+		r:       consts.MineAmountBase * 1000,
+		b:       predB,
+		counter: 42,
+		balance: 900_000_000_000,
+		slot:    predSlot,
+	})
+	return &verifyFixture{m: m, pred: pred}
+}
+
+type mineOutputParams struct {
+	r, b, c uint64
+	counter uint64
+	cumInfl uint64
+	balance uint64
+	slot    uint32
+}
+
+// makeMineOutput assembles a mine chain output and wraps it as a tip at a
+// synthetic output ID with the given slot.
+func makeMineOutput(t *testing.T, lib *txbuildercore.Library[any], consts *txbuildercore.Constants, p mineOutputParams) *mineTip {
+	t.Helper()
+
+	lockBin, err := lib.NewMineLock(p.r, p.b, p.c, uint64(consts.MinerVersion), 0)
+	require.NoError(t, err)
+	chainBin, err := lib.NewChainTransition(base.MineChainID, 0, 0, p.cumInfl, 0, p.counter, 0)
+	require.NoError(t, err)
+
+	ob := txbuildercore.NewOutputBuilder()
+	ob.PutConstraint(txbuildercore.EncodeAmounts(p.balance, consts.MineAmountBase), txbuildercore.ConstraintIndexAmounts)
+	ob.PutConstraint(lockBin, txbuildercore.ConstraintIndexLock)
+	ob.PutConstraint(chainBin, txbuildercore.ConstraintIndexChain)
+	data := ob.Output().Bytes()
+
+	// a synthetic predecessor output ID carrying the wanted slot
+	var txid base.TransactionID
+	copy(txid[:base.LedgerTimeByteLength], base.T(p.slot, 1).Bytes())
+	txid[base.LedgerTimeByteLength] = 2
+	txid[len(txid)-1] = 0x5A
+	oid := base.MustNewOutputID(txid, 0)
+
+	tip, err := parseMineTip(lib, oid, data, false)
+	require.NoError(t, err)
+	return tip
+}
+
+// solve builds a transit on the fixture's predecessor stamped at succSlot with
+// successor difficulty succB, searches nonces until the VRF output's
+// trailing-zero-bit count satisfies want, then completes the proof and signs.
+// prover defaults to the fixture's wallet key.
+func (f *verifyFixture) solve(t *testing.T, succSlot uint32, succB, succC uint64, prover *vrf.Prover, want func(z int) bool) []byte {
+	t.Helper()
+	if prover == nil {
+		prover = f.m.prover
+	}
+	txb, predIdx := f.m.buildTransit(f.pred, succSlot, succB, succC, f.m.fullPayoutTo(f.m.tagAlongSeqID, succSlot))
+	w := &mineWorker{prover: prover, pred: f.pred.oid, slot: succSlot}
+	for n := uint64(1); n < 1<<24; n++ {
+		if z, _, nonce, st := w.attempt(n); want(z) {
+			pi, err := prover.ProofFor(st)
+			require.NoError(t, err)
+			txb.PutUnlockParams(predIdx, txbuildercore.ConstraintIndexLock, txbuildercore.MineUnlockParams(pi, nonce))
+			txb.SignED25519(f.m.wallet.PrivateKey)
+			return txb.Bytes()
+		}
+	}
+	t.Fatal("no nonce satisfied the search; adjust the fixture difficulty")
+	return nil
+}
+
+// honestTarget is the earliest legal stamp and the difficulty the retarget dictates for it.
+func (f *verifyFixture) honestTarget() (succSlot uint32, succB, succC uint64) {
+	predSlot := f.pred.oid.Timestamp().Slot
+	succSlot = predSlot + uint32(f.m.consts.MineMinPace)
+	succB, succC = f.m.consts.MineRetarget(f.pred.ml.B, f.pred.ml.C, predSlot, succSlot)
+	return
+}
+
+// mineOne builds and solves a transit on the fixture's predecessor.
+func (f *verifyFixture) mineOne(t *testing.T) []byte {
+	t.Helper()
+	succSlot, succB, succC := f.honestTarget()
+	return f.solve(t, succSlot, succB, succC, nil, func(z int) bool { return z >= int(f.pred.ml.B) })
+}
+
+// mineUnsolved builds a fully correct transit, valid proof included, whose
+// output does NOT satisfy the difficulty — every field is honest except the
+// amount of work.
+func (f *verifyFixture) mineUnsolved(t *testing.T) []byte {
+	t.Helper()
+	succSlot, succB, succC := f.honestTarget()
+	return f.solve(t, succSlot, succB, succC, nil, func(z int) bool { return z < int(f.pred.ml.B) })
+}
+
+// a genuinely mined transit verifies, and yields the tip to build on next
+func TestVerifyMineTransitAcceptsGenuine(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineOne(t)
+
+	succ, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, txBytes)
+	require.NoError(t, err)
+	require.EqualValues(t, f.pred.cc.TransitionCounter+1, succ.cc.TransitionCounter)
+	require.EqualValues(t, f.pred.ml.R-f.m.consts.MineAmountBase, succ.ml.R)
+	require.Equal(t, f.pred.balance, succ.balance)
+}
+
+// Insufficient proof of work is rejected. This is the check that matters most:
+// the node does not verify PoW before streaming, so without it anyone could
+// flood every miner with costless fabricated transits. The transit here is
+// correct in every other respect, so only the PoW rule can reject it.
+func TestVerifyMineTransitRejectsWeakPoW(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineUnsolved(t)
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, txBytes)
+	require.ErrorContains(t, err, "insufficient proof of work")
+}
+
+// a transit that does not spend the predecessor we track is rejected, which is
+// what defeats a forged transit imitating the mine-transit shape
+func TestVerifyMineTransitRejectsWrongPredecessor(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineOne(t)
+
+	other := makeMineOutput(t, f.m.lib, f.m.consts, mineOutputParams{
+		r: f.m.consts.MineAmountBase * 1000, b: 6,
+		counter: 42, balance: 900_000_000_000, slot: 1000,
+	})
+	other.oid = base.MustNewOutputID(randTxID(0x11, 0x22), 0)
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, other, txBytes)
+	require.ErrorContains(t, err, "is not the predecessor")
+}
+
+// a transit built against different predecessor BYTES is rejected even when it
+// names the right predecessor ID
+func TestVerifyMineTransitRejectsWrongPredecessorBytes(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineOne(t)
+
+	// same output ID, different content
+	tampered := *f.pred
+	other := makeMineOutput(t, f.m.lib, f.m.consts, mineOutputParams{
+		r: f.m.consts.MineAmountBase * 999, b: 6,
+		counter: 42, balance: 900_000_000_000, slot: 1000,
+	})
+	tampered.data = other.data
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, &tampered, txBytes)
+	require.ErrorContains(t, err, "input commitment")
+}
+
+// the successor must carry the difficulty the retarget dictates, so a miner
+// cannot ease the chain for itself
+func TestVerifyMineTransitRejectsWrongDifficulty(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+
+	// build a transit whose successor carries a difficulty of its own choosing
+	succSlot, honest, succC := f.honestTarget()
+	txBytes := f.solve(t, succSlot, honest-1, succC, nil, func(z int) bool { return z >= int(f.pred.ml.B) }) // one bit easier
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, txBytes)
+	require.ErrorContains(t, err, "difficulty")
+}
+
+// the VRF proof must be under the signer's key: work done under any other key,
+// however much of it, does not count for this transit
+func TestVerifyMineTransitRejectsForeignProof(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	_, otherPriv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	other, err := vrf.NewProver(otherPriv)
+	require.NoError(t, err)
+
+	succSlot, succB, succC := f.honestTarget()
+	txBytes := f.solve(t, succSlot, succB, succC, other, func(z int) bool { return z >= int(f.pred.ml.B) })
+	_, err = verifyMineTransit(f.m.lib, f.m.consts, f.pred, txBytes)
+	require.ErrorContains(t, err, "VRF proof")
+}
+
+// stamping closer than the minimum pace is rejected
+func TestVerifyMineTransitRejectsPaceBelowMinimum(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+
+	predSlot := f.pred.oid.Timestamp().Slot
+	tooSoon := predSlot + uint32(f.m.consts.MineMinPace) - 1
+	succB, succC := f.m.consts.MineRetarget(f.pred.ml.B, f.pred.ml.C, predSlot, tooSoon)
+	txBytes := f.solve(t, tooSoon, succB, succC, nil, func(z int) bool { return z >= int(f.pred.ml.B) })
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, txBytes)
+	require.ErrorContains(t, err, "pace")
+}
+
+// any bit flipped after signing breaks either the PoW or the signature
+func TestVerifyMineTransitRejectsTamperedBytes(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineOne(t)
+
+	for _, pos := range []int{0, len(txBytes) / 3, len(txBytes) / 2, len(txBytes) - 1} {
+		tampered := append([]byte(nil), txBytes...)
+		tampered[pos] ^= 0x01
+		_, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, tampered)
+		require.Errorf(t, err, "flipping a bit at %d must not verify", pos)
+	}
+}
+
+// a transit on an exhausted chain is rejected
+func TestVerifyMineTransitRejectsExhaustedChain(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	txBytes := f.mineOne(t)
+
+	drained := *f.pred
+	drainedML := *f.pred.ml
+	drainedML.R = f.m.consts.MineAmountBase - 1
+	drained.ml = &drainedML
+
+	_, err := verifyMineTransit(f.m.lib, f.m.consts, &drained, txBytes)
+	require.ErrorContains(t, err, "exhausted")
+}
+
+// garbage is rejected without panicking
+func TestVerifyMineTransitRejectsGarbage(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+
+	for _, b := range [][]byte{nil, {}, {0x00}, []byte("not a transaction at all")} {
+		_, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, b)
+		require.Error(t, err)
+	}
+}
+
+// the concurrent search produces a proof the miner's own verifier accepts; this
+// is what keeps the worker loop under the race detector
+func TestMineParallelSolvesAndVerifies(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	f.m.workers = 4
+	succSlot, succB, succC := f.honestTarget()
+	txb, predIdx := f.m.buildTransit(f.pred, succSlot, succB, succC, f.m.fullPayoutTo(f.m.tagAlongSeqID, succSlot))
+	var sol *mineSolution
+	attempts := f.m.mineParallel(f.pred.oid, succSlot, int(f.pred.ml.B), time.Now().Add(30*time.Second),
+		func() []byte { return nil },
+		func(s mineSolution) {
+			sol = &s
+			f.m.abort.Store(true) // one is enough here
+		})
+	require.NotNil(t, sol)
+	require.NotZero(t, attempts)
+
+	txb.PutUnlockParams(predIdx, txbuildercore.ConstraintIndexLock, txbuildercore.MineUnlockParams(sol.proof, sol.nonce))
+	txb.SignED25519(f.m.wallet.PrivateKey)
+	tip, err := verifyMineTransit(f.m.lib, f.m.consts, f.pred, txb.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, f.pred.cc.TransitionCounter+1, tip.cc.TransitionCounter)
+}
+
+// A round does not stop at its first solution: it searches until the deadline
+// and hands over every solution below the bar, the bar moving down with each.
+// At a low K that is what decides the slot, the smallest VRF output held by the
+// sequencers at settlement; a miner that stopped early made a fraction of its
+// draws and won far less than its hashrate share.
+func TestMineParallelGrindsUntilDeadline(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	f.m.workers = 2
+	succSlot, _, _ := f.honestTarget()
+	const window = 1500 * time.Millisecond
+	var mu sync.Mutex // the workers read the bar while the round moves it, as with the tree's lock
+	var bar []byte
+	var got [][]byte
+	start := time.Now()
+	f.m.mineParallel(f.pred.oid, succSlot, 6, start.Add(window),
+		func() []byte {
+			mu.Lock()
+			defer mu.Unlock()
+			return bar
+		},
+		func(s mineSolution) {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, s.beta)
+			bar = s.beta // what accepting the own transit does to the tree
+		})
+	elapsed := time.Since(start)
+
+	require.GreaterOrEqual(t, elapsed, window, "the round must run to its deadline")
+	require.Less(t, elapsed, window+500*time.Millisecond)
+	// at K=6 a solution takes ~64 attempts, so a 1.5s round improves several times
+	require.Greater(t, len(got), 1, "the round must keep improving after the first solution")
+	for i := 1; i < len(got); i++ {
+		require.Negative(t, bytes.Compare(got[i], got[i-1]), "every handed-over solution must beat the previous one")
+	}
+}
+
+// Under --max-hashrate-khs the round makes about cap x duration attempts. The
+// target is unreachable, so the round runs its full window, and the cap is set
+// far below what the machine can do, so that pacing is what decides the count.
+// The cap is approached from below; the upper bound leaves room for the last
+// batch of every worker, the lower one for a loaded test machine.
+func TestMineParallelMaxHashrate(t *testing.T) {
+	f := newVerifyFixture(t, 6)
+	f.m.workers = 4
+	f.m.maxHashrate = 400
+	succSlot, _, _ := f.honestTarget()
+	const window = 2 * time.Second
+	start := time.Now()
+	found := false
+	attempts := f.m.mineParallel(f.pred.oid, succSlot, 250, start.Add(window),
+		func() []byte { return nil }, func(mineSolution) { found = true })
+	elapsed := time.Since(start)
+
+	require.False(t, found)
+	require.Less(t, elapsed, window+500*time.Millisecond, "a capped worker must not sleep past the deadline")
+	expected := f.m.maxHashrate * window.Seconds()
+	require.LessOrEqual(t, float64(attempts), expected*1.1)
+	require.GreaterOrEqual(t, float64(attempts), expected*0.7)
+}

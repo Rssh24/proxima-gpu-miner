@@ -1,0 +1,18 @@
+services:
+  node0:
+    build:
+      context: ../..
+      dockerfile: tests/node-docker-setup/dockerfile
+    container_name: Proxima-Node
+    image: proxima-node:latest
+    ports:
+      - "8000:8000"
+      - "4000:4000"
+    environment:
+      - DEBUG=false
+    volumes:
+      - ./data/config:/app/config
+    working_dir: /app   
+    command: ["./start.sh"]
+    stop_signal: SIGINT
+    stop_grace_period: 30s

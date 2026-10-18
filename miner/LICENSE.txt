@@ -1,0 +1,35 @@
+The original application, OpenCL integration, local helpers, build and test
+scripts, and documentation added for this project are provided under the MIT
+License below. Third-party files retain their own terms.
+
+Selected curve and SHA-512 primitives are derived from TweetNaCl
+(https://tweetnacl.cr.yp.to/), which is public domain. The original is preserved
+as miner/tweetnacl.c in the source tree and binary distribution.
+
+The pinned Proxima sources retain their upstream MIT license and
+package-specific notices. In the source tree, see upstream/LICENSE.
+Third-party notices are in assets/licenses/ in the source tree and licenses/
+in the binary distribution. EasyFL redistribution permission is recorded in
+the notice index; the MIT grant below does not assign terms to EasyFL.
+
+MIT License
+
+Copyright (c) 2026
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

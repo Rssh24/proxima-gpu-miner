@@ -1,0 +1,329 @@
+package monitor
+
+import (
+	"context"
+	"crypto/ed25519"
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/lunfardo314/proxima/api"
+	"github.com/lunfardo314/proxima/global"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/multistate"
+	"github.com/lunfardo314/proxima/ledger/utxodb"
+	"github.com/lunfardo314/proxima/txstore"
+	"github.com/stretchr/testify/require"
+)
+
+var genesisPrivateKey ed25519.PrivateKey
+
+func init() {
+	genesisPrivateKey = ledger.InitWithTestingLedgerData(
+		ledger.WithCoverageContributionUpperBound(2*ledger.DefaultInitialSupply),
+		// low enough that the mine history test finds its nonces in milliseconds
+		ledger.WithMineDifficulty(8, 6, 10, 3),
+	)
+}
+
+// testEnv is the minimal Env over a utxodb in-memory state. The branch data a
+// real node supplies is reduced to the aggregates the monitor reads off it; the
+// txstore is empty unless a test walks the mine chain.
+type testEnv struct {
+	global.Logging
+	u       *utxodb.UTXODB
+	ctx     context.Context
+	store   global.TxBytesStore
+	lrbSlot uint32 // slot the synthetic LRB reports; the walk's windows hang off it
+}
+
+func (e *testEnv) Ctx() context.Context {
+	if e.ctx != nil {
+		return e.ctx
+	}
+	return context.Background()
+}
+func (e *testEnv) LatestReliableState() (multistate.SugaredStateReader, error) {
+	return e.u.SugaredStateReader(), nil
+}
+func (e *testEnv) GetLatestReliableBranch() *multistate.BranchData {
+	// utxodb has no branches. Supply the aggregates the monitor reads off one,
+	// with a stem carrying a valid output ID — Slot()/TxID() go through it.
+	stemTx := base.NewTransactionID(base.T(e.lrbSlot, 0), base.TransactionIDShort{}, false)
+	return &multistate.BranchData{
+		Supply: e.u.Supply(),
+		Stem:   &ledger.OutputWithID{ID: base.MustNewOutputID(stemTx, 0)},
+	}
+}
+func (e *testEnv) LatestBranchSlot() uint32                          { return 0 }
+func (e *testEnv) BranchDataForSlot(uint32) []*multistate.BranchData { return nil }
+func (e *testEnv) TxBytesStore() global.TxBytesStore {
+	if e.store == nil {
+		return txstore.NewDummyTxBytesStore()
+	}
+	return e.store
+}
+func (e *testEnv) GetConnectivityMatrix() *api.ConnectivityMatrix          { return nil }
+func (e *testEnv) SubscribeMiningTx(func(base.TransactionID, []byte) bool) {}
+
+// TestCensusAccounting builds a small state with several controllers holding
+// both plain and chained outputs, then asserts the census counts accounts as
+// distinct controllers (not outputs), splits balances by class, and conserves
+// the total. This is the core claim of the periodic tier.
+func TestCensusAccounting(t *testing.T) {
+	u := utxodb.NewUTXODB(genesisPrivateKey, true)
+
+	// three funded controllers; one of them also owns two chains
+	privA, _, addrA := u.GenerateAddress(1)
+	_, _, addrB := u.GenerateAddress(2)
+	_, _, addrC := u.GenerateAddress(3)
+	require.NoError(t, u.TokensFromFaucet(addrA, 2_000_000_000))
+	require.NoError(t, u.TokensFromFaucet(addrB, 1_000_000_000))
+	require.NoError(t, u.TokensFromFaucet(addrC, 500_000_000))
+	// a second faucet payment to A: two outputs, still one account
+	require.NoError(t, u.TokensFromFaucet(addrA, 300_000_000))
+
+	outsA, err := u.StateReader().GetUTXOsForController(addrA.ControllerID())
+	require.NoError(t, err)
+	require.NotEmpty(t, outsA)
+	tsA := outsA[0].ID.Timestamp().AddSlots(1)
+	_, err = u.MakeNewChain(100_000_000, privA, addrA, tsA)
+	require.NoError(t, err)
+	_, err = u.MakeNewChain(150_000_000, privA, addrA, tsA)
+	require.NoError(t, err)
+
+	m := &Monitor{env: &testEnv{u: u}}
+	census, err := m.collectCensus()
+	require.NoError(t, err)
+
+	// conservation: the scanned balance must equal the ledger supply
+	require.EqualValues(t, u.Supply(), census.TotalBalance)
+
+	// class balances must sum back to the scanned total, and UTXOs to NumUTXOs
+	var sumBalance uint64
+	var sumUTXOs int
+	for _, c := range census.Classes {
+		sumBalance += c.Balance
+		sumUTXOs += c.NumUTXOs
+	}
+	require.EqualValues(t, census.TotalBalance, sumBalance)
+	require.Equal(t, census.NumUTXOs, sumUTXOs)
+
+	// the three-way split of the UTXO set is exhaustive, in both counts and
+	// balances: every UTXO is chained, a plain siglock, or conditional
+	require.Equal(t, census.NumUTXOs, census.NumChained+census.NumSigLock+census.NumConditional)
+	require.EqualValues(t, census.TotalBalance, census.OnChainBalance+census.NonChainedBalance)
+
+	// idle capital is every plain sigLock output and every non-sequencer chain;
+	// the sequencer, the stem and the mine chain are not idle, and there is no
+	// delegation in this state
+	var idle uint64
+	for _, c := range census.Classes {
+		if c.Class == classSigLock || c.Class == classOtherChain {
+			idle += c.Balance
+		}
+	}
+	require.EqualValues(t, idle, census.IdleCapital)
+	require.Less(t, census.IdleCapital, census.TotalBalance)
+
+	// the mine chain no longer has a class of its own: its open mineLock is not
+	// a holder lock, so it falls in with the stem under "other locks"
+	require.NotContains(t, classNames(census), "mine chain")
+	require.Contains(t, classNames(census), classOther)
+
+	// the chain count must match what the state's own chain index holds: every
+	// chain has exactly one tip UTXO
+	var chainTips int
+	require.NoError(t, u.StateReader().IterateChainTips(func(base.ChainID, base.OutputID) bool {
+		chainTips++
+		return true
+	}))
+	require.Equal(t, chainTips, census.NumChained,
+		"chained UTXOs must equal the number of chain tips in the state")
+
+	t.Logf("census: %d UTXOs (%d chained, %d siglock, %d conditional), %d holders, pass %d ms",
+		census.NumUTXOs, census.NumChained, census.NumSigLock, census.NumConditional,
+		census.NumControllers, census.AsOf.DurationMs)
+	for _, c := range census.Classes {
+		t.Logf("   %-16s utxos=%-4d balance=%d", c.Class, c.NumUTXOs, c.Balance)
+	}
+}
+
+// TestCensusInterrupted checks that a pass abandoned by shutdown reports the
+// interruption instead of returning partial counts, which would otherwise be
+// published as if they were a complete census.
+func TestCensusInterrupted(t *testing.T) {
+	u := utxodb.NewUTXODB(genesisPrivateKey, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	m := &Monitor{env: &testEnv{u: u, ctx: ctx}}
+
+	_, err := m.collectCensus()
+	require.ErrorIs(t, err, errInterrupted)
+}
+
+// TestLiveSection checks the live tier over the same synthetic state: the mine
+// chain tip is picked up with its genesis R, and the JSON the page consumes
+// round-trips.
+func TestLiveSection(t *testing.T) {
+	u := utxodb.NewUTXODB(genesisPrivateKey, true)
+	m := &Monitor{env: &testEnv{u: u}}
+
+	live, err := m.collectLive()
+	require.NoError(t, err)
+	require.EqualValues(t, u.Supply(), live.Supply)
+
+	// mine chain: present at genesis, nothing mined yet, R at R_init
+	require.True(t, live.FairLaunch.Present)
+	// nothing seen on the mining stream, so the contest block stays absent
+	require.Nil(t, live.FairLaunch.Contest)
+	require.EqualValues(t, 0, live.FairLaunch.MinedTransactions)
+	require.EqualValues(t, 0, live.FairLaunch.MinedAmount)
+	require.Equal(t, live.FairLaunch.Ceiling, live.InitialSupply+live.FairLaunch.Remaining,
+		"ceiling T must equal I + R at genesis, when nothing is mined yet")
+	// the mine chain output is still at genesis (slot 0), inside the flat phase,
+	// so the reported A is the base amount
+	c := ledger.L(base.MaxSlot).Constants
+	require.EqualValues(t, c.MineAmountBase, live.FairLaunch.Amount)
+	// the page needs all three schedule constants to say which phase A is in and
+	// how fast it grows, so they must reach it
+	require.EqualValues(t, c.MineAmountBase, live.FairLaunch.AmountBase)
+	require.EqualValues(t, c.MineRampStartSlot, live.FairLaunch.RampStartSlot)
+	require.EqualValues(t, c.MineAmountPerSlot, live.FairLaunch.AmountPerSlot)
+	require.NotZero(t, live.FairLaunch.RampStartSlot)
+	require.NotZero(t, live.FairLaunch.AmountPerSlot)
+	require.EqualValues(t, live.FairLaunch.Remaining, live.FairLaunch.MintableInit,
+		"nothing mined yet, so R must still be the whole mintable budget")
+	// bootstrap capital is genesis plus the chain inflation cap accrued since;
+	// at slot 0 nothing has accrued, so it is the genesis supply exactly
+	require.EqualValues(t, live.InitialSupply, live.FairLaunch.BootstrapCapital)
+	require.Greater(t, live.FairLaunch.BootstrapPerSlot, uint64(0))
+
+	// the annual inflation cap: an upper bound, so it must dominate what a year
+	// of branch bonuses alone could pay, and stay a fraction of the supply
+	lib := ledger.L(base.MaxSlot)
+	slotsPerYear := uint64(lib.SlotsPerYear())
+	require.EqualValues(t, lib.BranchInflationBonusBase(live.CurrentSlot)*slotsPerYear, live.AnnualBranchBonusCap)
+	require.Greater(t, live.AnnualChainInflationCap, uint64(0))
+	require.Greater(t, live.AnnualInflationCapRate, 0.0)
+	require.Less(t, live.AnnualInflationCapRate, 1.0)
+	t.Logf("annual inflation cap: %.2f%% of supply (chain %d + branch bonus %d over %d slots)",
+		100*live.AnnualInflationCapRate, live.AnnualChainInflationCap, live.AnnualBranchBonusCap, slotsPerYear)
+
+	// the identity block the page header renders opens with the node build
+	require.Equal(t, global.Version, live.Node.Version)
+	require.Equal(t, global.CommitHash, live.Node.CommitHash)
+	require.Equal(t, global.CommitTime, live.Node.CommitTime)
+
+	// the clock must be internally consistent, since the page derives the
+	// current slot from it locally
+	lc := live.Ledger
+	require.EqualValues(t, ledger.L(0).GenesisTime().Unix(), lc.GenesisTimeUnix)
+	require.EqualValues(t, float64(lc.TicksPerSlot)*lc.TickDurationMs, float64(lc.SlotDurationMs))
+	require.EqualValues(t, base.PROX, lc.MotesPerToken)
+	require.Equal(t, base.BaseTokenName, lc.TokenName)
+	require.Len(t, lc.LibraryHash, 64)
+	t.Logf("ledger: slot 0 at %s, slot = %d ticks x %.0f ms = %d ms, library %s since slot %d",
+		time.Unix(lc.GenesisTimeUnix, 0).Format(time.DateTime),
+		lc.TicksPerSlot, lc.TickDurationMs, lc.SlotDurationMs, lc.LibraryHash[:12], lc.LibraryUpgradeSlot)
+
+	// the sequencer list is in the draw order of the delegation rating, the
+	// rated rows (positions 1..n, probabilities summing to 100) before the
+	// unrated; the genesis state has the bootstrap sequencer, active at slot 0
+	require.NotEmpty(t, live.Network.Sequencers)
+	rated, total := 0, 0.0
+	for i, s := range live.Network.Sequencers {
+		if s.Rating == nil {
+			continue
+		}
+		require.Equal(t, rated, i, "rated rows must precede the unrated")
+		rated++
+		require.Equal(t, rated, s.Rating.Position)
+		total += s.Rating.Probability
+	}
+	if rated > 0 {
+		require.InDelta(t, 100, total, 1e-9)
+	}
+	t.Logf("sequencers: %d, rated as delegation targets: %d", len(live.Network.Sequencers), rated)
+
+	// the whole response must serialize — this is what the page fetches
+	b, err := json.MarshalIndent(&response{Live: live}, "", "  ")
+	require.NoError(t, err)
+	require.Contains(t, string(b), "\"fair_launch\"")
+	t.Logf("live section collected in %d ms", live.AsOf.DurationMs)
+}
+
+// TestCensusScaling grows the state and reports the per-UTXO cost of the census
+// pass, which is the measurement spec 0 leaves open (TBD-p 1 and 2). It asserts
+// only that the pass stays correct as the state grows; the timings are logged
+// for the spec, not asserted on.
+func TestCensusScaling(t *testing.T) {
+	u := utxodb.NewUTXODB(genesisPrivateKey, true)
+	m := &Monitor{env: &testEnv{u: u}}
+
+	const accounts = 300
+	for i := 0; i < accounts; i++ {
+		_, _, addr := u.GenerateAddress(i + 1)
+		require.NoError(t, u.TokensFromFaucet(addr, 10_000_000))
+	}
+
+	start := time.Now()
+	census, err := m.collectCensus()
+	require.NoError(t, err)
+	elapsed := time.Since(start)
+
+	require.EqualValues(t, u.Supply(), census.TotalBalance)
+	require.GreaterOrEqual(t, census.NumControllers, accounts)
+
+	perUTXO := float64(elapsed.Nanoseconds()) / float64(census.NumUTXOs)
+	fmt.Printf("CENSUS COST: %d UTXOs, %d accounts, %v total, %.0f ns/UTXO\n",
+		census.NumUTXOs, census.NumControllers, elapsed, perUTXO)
+	t.Logf("extrapolated to 1M UTXOs: %.1f s", perUTXO*1e6/1e9)
+}
+
+func classNames(c *censusSection) []string {
+	ret := make([]string, 0, len(c.Classes))
+	for _, r := range c.Classes {
+		ret = append(ret, r.Class)
+	}
+	return ret
+}
+
+// TestContestWindow checks the mining-stream window: only transits whose proof
+// of work was verified count as competing miners, unverified arrivals are
+// reported separately rather than inflating the figure, transits racing the
+// same predecessor are counted as a contest, and observations fall out of the
+// window as the LRB slot advances past them.
+func TestContestWindow(t *testing.T) {
+	m := &Monitor{}
+	predA := base.MustNewOutputID(base.TransactionID{1}, 0)
+	predB := base.MustNewOutputID(base.TransactionID{2}, 0)
+	now := time.Now()
+
+	m.observed = []mineObservation{
+		// two miners racing the same predecessor: a real contest
+		{slot: 100, miner: "aa", difficulty: 22, predecessor: predA, verified: true, when: now},
+		{slot: 100, miner: "bb", difficulty: 22, predecessor: predA, verified: true, when: now},
+		// a third miner on the next predecessor, and the newest observation, so
+		// it is the one the live difficulty reading comes from
+		{slot: 104, miner: "cc", difficulty: 23, predecessor: predB, verified: true, when: now.Add(time.Second)},
+		// a forgery: claims the shape, fails the work check
+		{slot: 104, miner: "zz", difficulty: 40, predecessor: predB, verified: false, when: now},
+	}
+
+	c := m.contest(110)
+	require.NotNil(t, c)
+	require.Equal(t, 3, c.CompetingMiners, "the unverified arrival must not count as a miner")
+	require.Equal(t, 3, c.Submissions)
+	require.Equal(t, 1, c.Rejected)
+	require.Equal(t, 2, c.MaxRacingSamePredecessor, "two transits raced predecessor A")
+	require.EqualValues(t, 23, c.Difficulty, "difficulty comes from the newest verified transit")
+
+	// the window drops observations older than contestWindowSlots and, once
+	// empty, reports nothing at all rather than zeroes
+	require.NotNil(t, m.contest(100+contestWindowSlots))
+	require.Nil(t, m.contest(200+contestWindowSlots))
+	require.Empty(t, m.observed)
+}

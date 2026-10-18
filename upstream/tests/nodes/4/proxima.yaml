@@ -1,0 +1,65 @@
+# FOR TESTING ONLY!!! PRIVATE KEYS AND DERIVED DATA SHOULD NOT BE USED IN PRODUCTION
+# Testing configuration of the Proxima node with 4 other peers on the same machine
+# All private keys are auto-generated deterministically
+#
+# Peering configuration
+peering:
+  # libp2p host data: 
+  host:
+    # host ID private key (auto-generated, hex-encoded)
+    id_private_key: be5e5612e02be821d85b8a733e5048aa9f26a0e3ba564d11ab286ee59c2ff47db890877084b0bd4a1dc877f860fe3da2c8a30fe898c34f47983902951a996c5b
+    # host ID is derived from the host ID public key. 
+    id: 12D3KooWNEq1PFnwWLLwVSbHRrqzBav2QVkGhrbVoo4LXnxokGY2
+    # port to connect from other peers
+    port: 4004
+
+  # configuration of known peers (also known as 'manual peering').
+  # Each known peer is specified as a pair <name>: <multiaddr>, where:
+  # - <name> is unique mnemonic name used for convenience locally
+  # - <multiaddr> is the libp2p multi-address in the form '/ip4/<IPaddr ir URL>/<port>/tcp/p2p/<hostID>'
+  peers:
+    peer0: /ip4/127.0.0.1/tcp/4000/p2p/12D3KooWL32QkXc8ZuraMJkLaoZjRXBkJVjRz7sxGWYwmzBFig3M
+    peer1: /ip4/127.0.0.1/tcp/4001/p2p/12D3KooWT1MQM1kXKRaj6j9xjzVzUCWcrzihnVicepn82dTDkNYM
+    peer2: /ip4/127.0.0.1/tcp/4002/p2p/12D3KooWGpPKLTg4srCokDmdRZefCUQtVnzuaRzcJxZtBxUAkmy2
+    peer3: /ip4/127.0.0.1/tcp/4003/p2p/12D3KooWA6UDkW8kNfSxXRT8uy2uyA27HdH4rwBdWN51JNhJEGGu	
+
+# Node's API config
+api:
+  # server port
+  port: 8004
+
+# map of maps of sequencers <seq name>: <seq config>
+# usually none or 1 sequencer is configured for the node
+sequencers:
+  seq4:
+    enable: false
+    # chain ID of the sequencer
+    sequencer_id:
+    # chain controller's private key (hex-encoded)
+    controller_key: a8088c55a9827ddcd2207b373d7c01c4efb21a1ffdfd87fe973cccdbb897125a8601428a67a956d625889c264adae2b9e3e74b1f2bf3e3957eb7b1f78c6314aa
+    # sequencer pace
+    pace: 5
+    # maximum fee inputs allowed in the sequencer milestone transaction
+    max_tag_along_inputs: 50
+
+# logger config
+logger:
+  output: testlog_4.log
+  previous: erase
+
+# Other parameters used for tracing and debugging
+# Prometheus metrics exposure
+metrics:
+  port: 14004
+
+# pprof config
+pprof:
+  enable: false
+  port: 8080
+
+trace_tags:
+#  - gossip
+#  - pull_server
+#  - txinput
+#  - txStore
+#  - global

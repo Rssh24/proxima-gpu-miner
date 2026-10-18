@@ -1,0 +1,564 @@
+package attacher
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"runtime"
+	"time"
+
+	"github.com/lunfardo314/proxima/core/txmetadata"
+	"github.com/lunfardo314/proxima/core/vertex"
+	"github.com/lunfardo314/proxima/global"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/transaction"
+	"github.com/lunfardo314/proxima/sequencer/seqdata"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/lunfardo314/proxima/util/checkpoints"
+)
+
+// lazyRepeatEach polling fallback. With buffered pokeChan, this is only a safety net.
+const lazyRepeatEach = 10 * time.Millisecond
+
+var errDetachedInAttacher = errors.New("detached transaction in the attacher")
+
+// errStaleAbandonedAttacher aborts a milestone attacher whose own vertex has aged past the memDAG
+// wall-clock TTL without solidifying — a milestone stuck on a dependency that never resolves during
+// sync (e.g. a depth-capped branch forward sync never delivers). Bounding the attacher's lifetime to
+// the TTL keeps it from spinning for hours and pinning its whole past cone, and ensures no live
+// attacher outlives its vertex (so the size backstop never force-detaches a running attacher).
+// Handled like errDetachedInAttacher: log and drop, do NOT mark the vid Bad — the milestone can be
+// re-attached later if its dependency becomes available.
+var errStaleAbandonedAttacher = errors.New("stale attacher abandoned: own vertex past memDAG TTL")
+
+// errDepthCapNoSync aborts a milestone attacher that hit the branch depth cap on a node with no
+// forward sync to bridge the gap. Handled like errStaleAbandonedAttacher: log and drop, not Bad.
+var errDepthCapNoSync = errors.New("depth cap hit with forward sync disabled")
+
+func runMilestoneAttacher(
+	vid *vertex.WrappedTx,
+	metadata *txmetadata.TransactionMetadata,
+	callback func(vid *vertex.WrappedTx, err error),
+	env Environment,
+	ctx context.Context,
+) (cost int) {
+	a := newMilestoneAttacher(vid, env, metadata, ctx)
+	var err error
+
+	defer func() {
+		// capture attachment cost before close() disposes the past cone in a separate goroutine
+		if a.pastCone != nil {
+			cost = a.pastCone.AttachmentCost() + a.seqTxCost
+		}
+		go func() {
+			a.close()
+		}()
+		// it is guaranteed callback will always be called, if any
+		if callback != nil {
+			callback(vid, err)
+		}
+	}()
+
+	if err = a.run(); err != nil {
+		switch {
+		case errors.Is(err, ErrAttacherTransientStaleState):
+			// Transient race against a concurrent reattach. The consumer transaction
+			// is fine — its dependency was reset under it. Don't mark the vid Bad;
+			// the framework will retry the milestone once dependency state stabilizes.
+			env.Log().Warnf("[transient stale state] attacher %s aborted: %v", a.name, err)
+			a.LogTx(time.Now(), err.Error(), a.vid.ID())
+		case errors.Is(err, errDetachedInAttacher):
+			// The attacher's own vertex was force-detached by the memDAG size backstop
+			// (a stuck attacher can outlive the vertex TTL). The milestone is stale and
+			// being pruned — abort cleanly without marking it Bad, rather than killing the
+			// node as the old GracefulShutdown did.
+			env.Log().Warnf("[detached in attacher] attacher %s aborted: %v", a.name, err)
+			a.LogTx(time.Now(), err.Error(), a.vid.ID())
+		case errors.Is(err, errStaleAbandonedAttacher):
+			// The attacher's own vertex aged past the memDAG TTL without solidifying (stuck on a
+			// dependency that never resolved). Abandoned proactively, before the backstop force-detaches
+			// it, to stop the spin and release its pinned past cone. Not Bad: re-attachable later.
+			env.Log().Warnf("[stale attacher] attacher %s abandoned: %v", a.name, err)
+			a.LogTx(time.Now(), err.Error(), a.vid.ID())
+		case errors.Is(err, errDepthCapNoSync):
+			// Too far behind the branch this milestone builds on, and no 'sources' to catch up with.
+			// Either the network is really that far ahead (the operator must act) or a peer sent a
+			// fabricated far-ahead chain. Neither is a reason to stop the node or to mark the vid Bad.
+			env.Log().Errorf("[depth cap, no forward sync] attacher %s aborted: %v", a.name, err)
+			a.LogTx(time.Now(), err.Error(), a.vid.ID())
+		default:
+			vid.SetTxStatusBad(err)
+			if !errors.Is(err, ErrSolidificationDeadline) {
+				// solidification errors with big attachment depth are too verbose
+				env.Log().Warnf(a.logErrorStatusString(err))
+			}
+			a.LogTx(time.Now(), err.Error(), a.vid.ID())
+		}
+	} else {
+		msData := env.ParseMilestoneData(vid)
+		if vid.IsBranchTransaction() {
+			env.LogTopicf("branch_attach", 1, "%s", a.logFinalStatusString(msData)) // hide branch logging at level 0
+			env.EvidenceBranchInflationBonus(vid.InflationAmount())
+		} else {
+			env.LogTopicf("seq_attach", 1, "%s", a.logFinalStatusString(msData))
+		}
+		// post new vertex event with full metadata from wrapup
+		var seqName string
+		if msData != nil {
+			seqName = msData.Name()
+		}
+		if tx := vid.GetTransaction(); tx != nil {
+			env.PostEventNewVertex(tx, seqName)
+		}
+	}
+	// finished either way: good or bad
+	vid.SetSequencerAttachmentFinished()
+
+	env.PokeAllWith(vid)
+	return
+}
+
+func newMilestoneAttacher(vid *vertex.WrappedTx, env Environment, metadata *txmetadata.TransactionMetadata, providedCtx context.Context) *milestoneAttacher {
+	env.Assertf(vid.IsSequencerTransaction(), "newMilestoneAttacher: %s is not a sequencer milestone", vid.IDShortString)
+
+	ret := &milestoneAttacher{
+		attacher:         newPastConeAttacher(env, vid, vid.Timestamp(), vid.IDShortString(), vid.ProvidedBaseline()),
+		vid:              vid,
+		providedMetadata: metadata,
+		pokeChan:         make(chan struct{}, 1), // buffered: poke while fun() is running is retained, not lost
+		finals:           attachFinals{},
+		ctx:              providedCtx,
+	}
+	if ret.ctx == nil {
+		ret.ctx = env.Ctx()
+	}
+
+	ret.attacher.pokeMe = func(vid *vertex.WrappedTx) {
+		ret.pokeMe(vid)
+	}
+	ret.attacher.onDetachedVertex = func(detachedVid *vertex.WrappedTx, tx *transaction.Transaction) {
+		env.Log().Infof("REATTACH triggered for %s by attacher %s", detachedVid.IDShortString(), ret.name)
+		go AttachTransaction(tx, env)
+	}
+	ret.vid.OnPoke(func() {
+		ret._doPoke()
+	})
+	vid.Unwrap(vertex.UnwrapOptions{
+		Vertex: func(v *vertex.Vertex) {
+			ret.finals.numInputs = v.NumInputs()
+			ret.finals.numOutputs = v.NumProducedOutputs()
+		},
+		DetachedVertex: func(_ *vertex.DetachedVertex) {
+			env.GracefulShutdown(fmt.Sprintf("detached vertex %s encountered in newMilestoneAttacher", vid.IDShortString()))
+		},
+		VirtualTx: func(_ *vertex.VirtualTransaction) {
+			env.Log().Fatalf("unexpected virtual Tx: %s", vid.IDShortString())
+		},
+	})
+	// Set the sequencer transaction cost for budget checking during traversal
+	ret.attacher.seqTxCost = ret.finals.numInputs + ret.finals.numOutputs
+	ret.pastCone.MarkVertexNotInTheState(vid)
+
+	return ret
+}
+
+func (a *milestoneAttacher) run() error {
+	// Determine the baseline state. solidifyBaseline always runs and finds the real baseline; a
+	// caller-provided baseline (a.providedBaseline) only acts as a floor that bounds the backward pull
+	// (see solidifyBaselineUnwrapped / WithBaselineFloor), it does not override a newer branch.
+	if status := a.solidifyBaseline(); status != vertex.Good {
+		util.AssertMustError(a.err)
+		return a.err
+	}
+
+	a.Assertf(a.pastCone.GetBaseline() != nil, "a.pastCone.GetBaseline() != nil")
+
+	// then solidify past cone
+	status := a.solidifyPastCone()
+
+	a.Assertf(status != vertex.Undefined, "status!=vertex.Undefined")
+
+	if status != vertex.Good {
+		a.Assertf(a.err != nil, "a.err!=nil")
+		return a.err
+	}
+
+	a.AssertNoError(a.err)
+
+	err := a.checkConsistencyBeforeWrapUp()
+	if err != nil {
+		// ErrAttacherTransientStaleState is expected under the detach/reattach race:
+		// a dependency was reset under us. Don't FATAL, don't mark this vid Bad —
+		// just abandon the attempt; the framework will retry once state stabilizes.
+		if errors.Is(err, ErrAttacherTransientStaleState) {
+			return err
+		}
+		a.AssertNoError(err)
+	}
+
+	// finalizing touches. wrapUpAttacher returns an error when the produced
+	// values disagree with what this attacher computed from its past cone:
+	// per-milestone coverageDelta (sequencer constraint, every milestone) or,
+	// for branch txs, the produced stem aggregates. In that case the milestone
+	// is rejected (vid → Bad) by the caller in runMilestoneAttacher.
+	if err := a.wrapUpAttacher(); err != nil {
+		return err
+	}
+
+	a.pastCone.SetFlagsUp(a.vid, vertex.FlagPastConeVertexDefined)
+	if a.vid.IsBranchTransaction() {
+		// branch transaction vertex is immediately detached and does NOT retain the past cone:
+		// a branch is a committed state, served via the state reader. Storing only the coverage
+		// (not a CloneImmutable of the past cone) avoids pinning the past cone in memory and
+		// prevents it from being merged into successors' past cones (the memDAG leak).
+		a.vid.ConvertToDetached()
+		a.vid.SetTxStatusGoodBranch(a.FinalLedgerCoverage(a.vid.Timestamp()))
+		a.EvidenceBranchMutations(a.finals.MutationStats.NumCreated + a.finals.MutationStats.NumDeleted)
+		// branch wrap-up freed a lot of state — nudge the async GC worker. Non-blocking:
+		// the worker decides whether to actually runtime.GC() based on heap threshold + rate limit.
+		a.MemoryPressureGC()
+	} else {
+		a.vid.SetTxStatusGood(a.pastCone.PastConeBase.CloneImmutable(), a.FinalLedgerCoverage(a.vid.Timestamp()))
+		a.EvidencePastConeSize(a.pastCone.PastConeBase.Len())
+	}
+
+	{ // debug
+		const (
+			lastCheck     = true
+			printPastCone = false
+		)
+		if lastCheck {
+			err = a.pastCone.CheckFinalPastCone(a.getBaselineStateReader)
+			if err != nil {
+				err = fmt.Errorf("%w\n------ past cone of %s ------\n%s",
+					err, a.vid.IDShortString(), a.pastCone.Lines("     ").Join("\n"))
+			}
+			a.AssertNoError(err)
+		}
+		if printPastCone {
+			a.Log().Infof(">>>>>>>>>>>>> past cone of attacher %s\n%s", a.Name(), a.pastCone.Lines("      ").String())
+		}
+	}
+
+	a.SendToTippool(a.vid)
+
+	return nil
+}
+
+// Deadlock catcher: if a single iteration of the lazyRepeat loop (i.e. one fun()
+// call plus the subsequent select wait) does not complete within deadlockThreshold,
+// initiate a graceful shutdown with the full goroutine dump logged. The threshold
+// is intentionally generous — under sustained load with deep past cones,
+// fun() (e.g. solidifyPastCone) can take several seconds against slow state
+// reads or pulled deps; 30s was too tight (boot/seq1 tripped on legitimately-
+// progressing tail iterations). 90s catches genuine stuck loops within ~1.5min
+// while tolerating load spikes.
+//
+// Mirrors the sequencer outer-loop watchdog (sequencer.go) — Errorf + graceful
+// shutdown rather than Fatalf, so DB flush and peer cleanup happen before exit.
+
+const deadlockThreshold = 90 * time.Second
+
+// lazyRepeat repeats closure until it returns Good or Bad
+func (a *milestoneAttacher) lazyRepeat(loopName string, fun func() vertex.Status) vertex.Status {
+
+	// ===== deadlock catching ====
+	var checkpoint *checkpoints.Checkpoints
+	checkName := a.Name() + "_" + loopName
+	if !a.DeadlockCatchingDisabled() {
+		checkpoint = checkpoints.New(func(name string) {
+			buf := make([]byte, 4<<20) // 4MB buffer to capture all goroutines
+			n := runtime.Stack(buf, true)
+			a.Log().Errorf(">>>>>>>> DEADLOCK suspected in the loop '%s' (stuck for %v):\n%s",
+				checkName, deadlockThreshold, string(buf[:n]))
+			a.GracefulShutdown(fmt.Sprintf("deadlock suspected in lazyRepeat loop '%s'", checkName))
+		})
+		defer checkpoint.Close()
+	}
+	// ===== deadlock catching ====
+
+	// reusable timer avoids per-iteration allocation of time.After (reduces GC pressure under high TPS)
+	fallbackTimer := time.NewTimer(lazyRepeatEach)
+	defer fallbackTimer.Stop()
+
+	for {
+		if status := fun(); status != vertex.Undefined {
+			return status
+		}
+		// still Undefined → about to wait. A pass that reached the depth cap has already
+		// added its forward-sync target (recordCapBranch); the target is cleared when the
+		// branch commits, not here.
+
+		// Bound the attacher's lifetime to the memDAG vertex TTL. A milestone that has not
+		// solidified within the TTL is stuck on a dependency that never arrives (e.g. a depth-capped
+		// branch forward sync did not deliver); it would otherwise spin here every lazyRepeatEach for
+		// hours, pinning its whole past cone, until the size backstop force-detaches its vertex.
+		// Abandon it now instead — the vertex then ages out via normal (guarded) GC and no live
+		// attacher outlives its vertex. Mirrors the memDAG eviction condition (slotNow - SlotWhenAdded
+		// > TTL); the slotNow>SlotWhenAdded guard avoids a spurious abort on uint32 underflow.
+		if slotNow := ledger.TimeNow().Slot; slotNow > a.vid.SlotWhenAdded && slotNow-a.vid.SlotWhenAdded > a.VertexTTLSlots() {
+			a.setError(fmt.Errorf("%w: %s (undefined: %s)", errStaleAbandonedAttacher,
+				a.vid.IDShortString(), a.pastCone.UndefinedListLines().Join(", ")))
+			return vertex.Bad
+		}
+
+		// drain and reset the fallback timer for the next iteration
+		if !fallbackTimer.Stop() {
+			select {
+			case <-fallbackTimer.C:
+			default:
+			}
+		}
+		fallbackTimer.Reset(lazyRepeatEach)
+
+		// wait for: poke (dependency satisfied), shutdown, or fallback timeout.
+		// With buffered pokeChan, pokes arriving while fun() runs are retained
+		// and picked up here immediately without waiting for the fallback timer.
+		select {
+		case <-a.pokeChan:
+		case <-a.ctx.Done():
+			a.setError(fmt.Errorf("%w. Undefined past cone: %s", global.ErrInterrupted, a.pastCone.UndefinedListLines().Join(", ")))
+			return vertex.Bad
+		case <-fallbackTimer.C:
+		}
+
+		if !a.DeadlockCatchingDisabled() {
+			checkpoint.Check(checkName, deadlockThreshold)
+		}
+	}
+}
+
+func (a *milestoneAttacher) close() {
+	a.closeOnce.Do(func() {
+		a.pastCone.Dispose()
+		a.pastCone = nil
+
+		a.pokeClosingMutex.Lock()
+		defer a.pokeClosingMutex.Unlock()
+
+		a.closed = true
+		close(a.pokeChan)
+		a.vid.OnPokeNop()
+		a.attacher.pokeMe = func(_ *vertex.WrappedTx) {}
+	})
+}
+
+// solidifyBaseline determines the baseline state for this sequencer transaction.
+// Uses GetVertex() to obtain the Vertex pointer under a brief read lock, then processes
+// without holding the tip's lock.
+func (a *milestoneAttacher) solidifyBaseline() vertex.Status {
+	return a.lazyRepeat("baseline solidification", func() vertex.Status {
+		util.Assertf(a.vid.FlagsUp(vertex.FlagVertexTxAttachmentStarted), "AttachmentStarted flag must be up")
+		util.Assertf(!a.vid.FlagsUp(vertex.FlagVertexTxAttachmentFinished), "AttachmentFinished flag must be down")
+
+		v := a.vid.GetVertex()
+		if v == nil {
+			// Same case as solidifyPastCone below: our own milestone vertex was force-detached by
+			// the memDAG size backstop, which reclaims past-TTL vertices even when an attacher is
+			// still running — a stuck attacher (e.g. wedged during long forward sync) can outlive
+			// the vertex TTL. The milestone is stale and being pruned, so abort this attacher
+			// cleanly instead of killing the node; errDetachedInAttacher is handled in
+			// runMilestoneAttacher without marking the vid Bad.
+			a.setError(fmt.Errorf("%w: own vertex %s force-detached during baseline solidification", errDetachedInAttacher, a.vid.IDShortString()))
+			return vertex.Bad
+		}
+
+		// Status check under brief read lock
+		if a.vid.GetTxStatus() != vertex.Undefined {
+			a.setError(fmt.Errorf("solidifyBaseline: unexpected status for %s", a.vid.IDShortString()))
+			return vertex.Bad
+		}
+		a.Assertf(a.pastCone.GetBaseline() == nil, "a.baseline == nil")
+
+		// Baseline solidification WITHOUT holding tip's lock
+		baselineID, ok := a.solidifyBaselineUnwrapped(v, a.vid)
+		if !ok {
+			return vertex.Bad
+		}
+		if baselineID != nil {
+			a.setBaseline(baselineID)
+			return vertex.Good
+		}
+		return vertex.Undefined
+	})
+}
+
+// solidifyPastCone solidifies and validates sequencer transaction in the context of the known baseline state.
+// Uses GetVertex() to obtain the Vertex pointer under a brief read lock, then processes
+// the past cone without holding the tip's lock. This eliminates deadlocks between
+// concurrent milestone attachers with overlapping past cones.
+// The Vertex pointer is safe to use after the lock is released because
+// FlagVertexTxAttachmentStarted prevents ConvertToDetached during attachment.
+func (a *milestoneAttacher) solidifyPastCone() vertex.Status {
+	return a.lazyRepeat("past cone solidification", func() (status vertex.Status) {
+		v := a.vid.GetVertex()
+		if v == nil {
+			// Our own milestone vertex was force-detached out from under us by the memDAG
+			// size backstop, which reclaims past-TTL vertices even when an attacher is still
+			// running — a stuck attacher (e.g. wedged waiting on a dependency) can outlive
+			// the vertex TTL. The milestone is stale and being pruned, so abort this attacher
+			// cleanly instead of killing the node; errDetachedInAttacher is handled in
+			// runMilestoneAttacher without marking the vid Bad.
+			a.setError(fmt.Errorf("%w: own vertex %s force-detached during solidification", errDetachedInAttacher, a.vid.IDShortString()))
+			return vertex.Bad
+		}
+
+		// Status check under brief read lock
+		if a.vid.GetTxStatus() != vertex.Undefined {
+			a.setError(fmt.Errorf("solidifyPastCone: unexpected status for %s", a.vid.IDShortString()))
+			return vertex.Bad
+		}
+
+		// Past cone traversal WITHOUT holding tip's lock
+		if ok := a.attachVertexUnwrapped(v, a.vid); !ok {
+			a.Assertf(a.err != nil, "a.err != nil")
+			return vertex.Bad
+		}
+
+		ok, finalSuccess := a.validateSequencerTxUnwrapped(v)
+		if !ok {
+			a.Assertf(a.err != nil, "a.err != nil")
+			return vertex.Bad
+		}
+
+		if !finalSuccess {
+			return vertex.Undefined
+		}
+
+		const doubleCheck = true
+		if doubleCheck {
+			// debug assertion only — use a.ctx so state reads abort on shutdown instead
+			// of racing with a closed DB. ctx cancellation yields conflict=nil, err!=nil,
+			// which satisfies the Assertf (conflict == nil) — safe on shutdown.
+			conflict, _ := a.CheckConflicts(a.ctx)
+			a.Assertf(conflict == nil, "unexpected conflict %s in %s", conflict.IDStringShort(), a.name)
+		}
+
+		util.Assertf(!a.pastCone.ContainsUndefined(),
+			"inconsistency: attacher %s is 'finalSuccess' but still contains undefined Vertices. LinesVerbose:\n%s",
+			a.name, a.dumpLinesString)
+		return vertex.Good
+	})
+}
+
+func (a *milestoneAttacher) validateSequencerTxUnwrapped(v *vertex.Vertex) (ok, finalSuccess bool) {
+	if a.pastCone.ContainsUndefined() {
+		return true, false
+	}
+	if !a.allEndorsementsDefined(v) || !a.allInputsDefined(v) {
+		return true, false
+	}
+	// inputs solid. Validate the constraints once. This function is re-entrant: CheckAndClean
+	// below can return "pending" (a canonical branch on the tip's own lineage not committed yet
+	// during catch-up), in which case we wait and re-run on the poke without re-validating.
+	glbFlags := a.vid.FlagsNoLock()
+	if !glbFlags.FlagsUp(vertex.FlagVertexConstraintsValid) {
+		if err := a.validateVertex(v); err != nil {
+			a.LogTx(time.Now(), fmt.Sprintf("validation failed: %v", err), a.vid.ID())
+
+			a.setError(err)
+			v.UnReferenceDependencies()
+			return false, false
+		}
+		a.LogTx(time.Now(), "validation OK", a.vid.ID())
+
+		// set under the write lock: a concurrent attacher reads this vertex's status (same flag word)
+		// under the read lock during past-cone traversal before it becomes Good.
+		a.vid.SetFlagsUp(vertex.FlagVertexConstraintsValid)
+	}
+
+	// Use a.ctx (not context.Background) so that CheckAndClean — which reads state
+	// via a.getBaselineStateReader → multistate → BadgerDB — bails out cleanly when
+	// the node is shutting down. Otherwise the state read can race with the DB close
+	// during graceful shutdown and panic with "database is closed or unavailable".
+	conflict, pending, err := a.pastCone.CheckAndClean(a.ctx, a.getBaselineStateReader)
+	if err != nil {
+		a.setError(err)
+		v.UnReferenceDependencies()
+		return false, false
+	}
+	if pending != nil {
+		// gossip attached this sequencer tx before the in-order commit reached the canonical branch
+		// on its own lineage (catch-up ordering). It is not a competing fork: wait for that branch
+		// to commit and re-run on its poke. The wait is bounded by the lazyRepeat lifetime cap (the
+		// memDAG vertex TTL): a branch that never commits (e.g. a losing fork the tip wrongly depends
+		// on) makes the attacher age out and abandon rather than spin forever.
+		a.pokeMe(pending)
+		return true, false
+	}
+	if conflict != nil {
+		a.setError(fmt.Errorf("conflict %s in the past cone:\n%s", conflict.IDStringShort(), a.pastCone.Lines("    ").String()))
+		v.UnReferenceDependencies()
+		return false, false
+	}
+	return true, true
+}
+
+func (a *milestoneAttacher) _doPoke() {
+	a.pokeClosingMutex.RLock()
+	defer a.pokeClosingMutex.RUnlock()
+
+	// must be non-blocking, otherwise deadlocks when syncing or high TPS
+	if !a.closed {
+		select {
+		case a.pokeChan <- struct{}{}:
+		default:
+			// poke is lost when blocked, but that is ok because there's pullFromPeers from the attacher's side
+		}
+	}
+}
+
+func (a *milestoneAttacher) pokeMe(with *vertex.WrappedTx) {
+	flags := a.pastCone.Flags(with)
+	util.Assertf(a.pastCone.IsKnown(with), "must be marked known %s", with.IDShortString)
+	if !flags.FlagsUp(vertex.FlagPastConeVertexAskedForPoke) {
+		a.PokeMe(a.vid, with)
+		a.pastCone.SetFlagsUp(with, vertex.FlagPastConeVertexAskedForPoke)
+	}
+}
+
+func (a *milestoneAttacher) logFinalStatusString(msData *seqdata.SequencerData) string {
+	var msg string
+
+	msDataStr := " (n/a)"
+	if msData != nil {
+		msDataStr = fmt.Sprintf(" %s", msData.Name())
+	}
+
+	if a.vid.IsBranchTransaction() {
+		msg = fmt.Sprintf("--- BRANCH%s %s(in %d, tx: %d), i = %s",
+			msDataStr, a.vid.IDShortString(), a.finals.numInputs, a.finals.MutationStats.NumConfirmedTransactions,
+			util.Th(a.vid.InflationAmount()))
+	} else {
+		numEndorse := 0
+		if tx := a.vid.GetTransaction(); tx != nil {
+			numEndorse = tx.NumEndorsements()
+		}
+		msg = fmt.Sprintf("--- SEQ TX%s %s(in %d, endorse %d), i = %s, lnow: %s",
+			msDataStr, a.vid.IDShortString(), a.finals.numInputs, numEndorse, util.Th(a.vid.InflationAmount()), ledger.TimeNow().String())
+	}
+	if a.vid.GetTxStatus() == vertex.Bad {
+		msg += fmt.Sprintf("BAD: err = '%v'", a.vid.GetError())
+	} else {
+		msg += fmt.Sprintf(", base: %s, cov/delta: %s/%s", a.finals.baseline.StringShort(),
+			util.Th(a.finals.LedgerCoverage), util.Th(a.finals.CoverageDelta))
+		if a.vid.IsBranchTransaction() {
+			if a.TopicVerbosityLevel("branch_attach") > 0 {
+				msg += fmt.Sprintf(", slot inflation: %s, supply: %s", util.Th(a.finals.SlotInflation), util.Th(a.finals.Supply))
+			}
+		} else {
+			if a.TopicVerbosityLevel("seq_attach") > 0 {
+				msg += fmt.Sprintf(", slot inflation: %s", util.Th(a.finals.SlotInflation))
+			}
+		}
+	}
+	return msg
+}
+
+func (a *milestoneAttacher) logErrorStatusString(err error) string {
+	blStr := "baseline: N/A"
+	if bl := a.pastCone.GetBaseline(); bl != nil {
+		blStr = fmt.Sprintf("baseline: %s (hex = %s)", bl.StringShort(), bl.StringHex())
+	}
+	return fmt.Sprintf("ATTACH %s (%s) -> BAD(%v)", a.vid.IDShortString(), blStr, err)
+}

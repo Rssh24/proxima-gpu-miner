@@ -1,0 +1,349 @@
+// mineLock — the fair-launch mine chain lock.
+//
+// It sits at the lock element (output index 2) of the single genesis mine
+// chain UTXO and enforces the ENTIRE mining policy by itself. It is an OPEN
+// lock: anyone can spend the mine output (no per-output signature); the one
+// mandatory transaction signature (tx_integrity_validator) identifies the
+// miner and is the holder the reward is paid to.
+//
+// Bytecode arguments (mutable per-transit state; the emission schedule A, the
+// difficulty band E, C, the minimum pace P, the harden count and the fee live
+// in ledger constants):
+//   $0 R  (z64)  remaining mintable motes; decreases by A each transit
+//   $1 B  (z64)  current difficulty (bits); seeded from constMineBaseDifficulty
+//                and retargeted per transit (see _mineAdjustedB)
+//   $2 C  (z64)  full slots in a row since the last harden (see _mineAdjustedC)
+//   $3 V  (z64)  the version of the miner that built this output, which must
+//                equal constMinerVersion: the constant is bumped when every
+//                miner must move to a new release, and from that slot a transit
+//                built by an older miner is invalid. The miner writes its own
+//                compiled-in version here; nothing else reads it.
+//   $4 O  (z64)  the payout option of the transit that produced this output,
+//                1, 2 or 3 (0 on the genesis output): it selects the reward
+//                layout the consumed arm requires, see _minePayout. Explicit
+//                rather than inferred from the layout, so the node's ingate
+//                and every reader of a transit take it off the lock bytes.
+//
+// The pace is one step per slot. The retarget sees only the gap
+// M = successorSlot - predecessorSlot, which at pace 1 says "at least one
+// solution in the slot" (M = 1, a full slot) or "none" (M >= 2, empty slots),
+// never how many solutions competed. A symmetric controller would therefore
+// settle with half the slots empty; the retarget is asymmetric instead: it
+// hardens one bit after constMineHardenAfter full slots in a row and eases one
+// bit per empty slot, so the equilibrium leaves about one slot in
+// constMineHardenAfter + 1 empty and every full slot holds a couple of
+// competing solutions, which the sequencers settle by the canonical winner rule
+// (kb/mine_conflict_rule.md). Beyond the difficulty ceiling nothing breaks:
+// the slots are simply all full.
+//
+// The required difficulty depends on the pace: K = max(B - (M - P), E), where P
+// is the minimum pace and E the floor. At the minimum pace M = P the full B is
+// required; each extra slot of pace eases one bit. That gives liveness for
+// free: as M grows K falls to E, so however far B sits above the network's
+// hashrate, waiting long enough always makes a transit solvable and the chain
+// cannot wedge.
+
+// ---- accessors on the transition (evaluated in the CONSUMED context, where
+// `self` is the predecessor mine output being spent) ----
+
+// successor mine output index, from this output's chain unlock parameters
+func _mineSuccIdx  : byte(selfSiblingUnlockParams(chainConstraintIndex), 0)
+func _mineSuccPath : concat(pathToProducedOutputs, _mineSuccIdx)
+func _mineSuccLock : atPath(concat(_mineSuccPath, lockConstraintIndex))
+// $0 argument index in the successor's mineLock bytecode
+func _mineSuccArg       : parseInlineDataArgument(_mineSuccLock, $0, #mineLock)
+func _mineSuccInflation : amountAt(atPath(concat(_mineSuccPath, amountsConstraintIndex)), 1)
+
+// predecessor slot and pace M = successor slot - predecessor slot
+func _minePredSlot : slotOfInputByIndex(selfOutputIndex)
+func _mineM        : sub(txSlot, _minePredSlot)
+
+// produced output [i]: lock bytecode, chain constraint, index value and amount
+// $0 output index ($1 index-value position)
+func _mineOutLock       : atPath(concat(pathToProducedOutputs, $0, lockConstraintIndex))
+func _mineOutChain      : atPath(concat(pathToProducedOutputs, $0, chainConstraintIndex))
+func _mineOutIndexValue : atPath(concat(pathToProducedOutputs, $0, indexValuesConstraintIndex, $1))
+func _mineOutAmount     : tokenBalanceByOutputPath(concat(pathToProducedOutputs, $0))
+// $0 an amount in PROX -> motes
+func _prox : mul($0, constMotesPerProx)
+
+// ---- emission schedule: the amount A minted per transit ----
+
+// A is flat at constMineAmountBase up to and including constMineRampStartSlot,
+// then grows by constMineAmountPerSlot per slot. Nothing caps the growth here
+// because R does: the chain stops when what is left of R cannot cover a transit.
+//
+// The base amount is chosen so that the flat phase alone carries mined supply to
+// the point where the genesis capital can no longer commit a healthy branch on
+// its own, so the reward is constant for as long as one party still controls the
+// network and starts growing the moment that stops being true. Growing afterwards keeps a
+// transit worth attempting as difficulty climbs with hashrate, which is what
+// carries the tail to exhaustion.
+//
+// $0 slot
+func _mineAmountAtSlot :
+if(
+   lessOrEqualThan(uint8Bytes($0), uint8Bytes(constMineRampStartSlot)),
+   constMineAmountBase,
+   add(
+      constMineAmountBase,
+      mul(sub($0, constMineRampStartSlot), constMineAmountPerSlot)
+   )
+)
+
+// A for the transaction being validated. Every use of A below - the exhaustion
+// guard, the successor's inflation and R decrement, the payout and tag-along
+// caps - goes through here, so one transaction is checked against one A.
+func _mineAmount : _mineAmountAtSlot(txSlot)
+
+// ---- required difficulty (pace-relieved) ----
+
+// $0 B, $1 M (pace, >= P) -> the difficulty K a transit at gap M must satisfy:
+// K = max(B - (M - P), E). At the minimum pace M = P it is the full B; each extra
+// slot of pace eases one bit, floored at E. The pace check guarantees M >= P, so
+// M - P never underflows, and B >= E always (clamped), so B - E never does. This
+// is what linearizes pace-vs-B (§8): the winning pace tracks B one slot per bit,
+// letting the retarget hold the target, and it doubles as the liveness valve
+// (K -> E as M grows, so a chain can never wedge on difficulty).
+func _mineRequiredK :
+if(
+   lessOrEqualThan(uint8Bytes(sub($0, constMineFloorDifficulty)), uint8Bytes(sub($1, constMineMinPace))),
+   constMineFloorDifficulty,
+   sub($0, sub($1, constMineMinPace))
+)
+
+// ---- adaptive retarget ----
+
+// one bit up, clamped at the ceiling C. $0 = B
+func _mineHarder :
+if(
+   lessOrEqualThan(uint8Bytes(constMineMaxDifficulty), uint8Bytes($0)),
+   constMineMaxDifficulty,
+   add($0, u64/1)
+)
+
+// one bit down per empty slot (M - 1 of them at gap M >= 2), floored at E. $0 = B
+func _mineEased :
+if(
+   lessOrEqualThan(uint8Bytes(sub($0, constMineFloorDifficulty)), uint8Bytes(sub(_mineM, u64/1))),
+   constMineFloorDifficulty,
+   sub($0, sub(_mineM, u64/1))
+)
+
+// a full slot: the successor follows its predecessor by exactly one slot
+func _mineFullSlot : equalUint(_mineM, u64/1)
+
+// $0 C -> this full slot completes a run of constMineHardenAfter full slots
+func _mineHardens : and(_mineFullSlot, equalUint(add($0, u64/1), constMineHardenAfter))
+
+// The genesis mine output is at slot 0, so the very first transit sees
+// M = txSlot - 0 (meaningless); while the predecessor is genesis, B and C are
+// held.
+
+// $0 B, $1 C -> the difficulty the successor must carry: hardened one bit when
+// this full slot completes the run, eased one bit per empty slot, else held
+func _mineAdjustedB :
+if(
+   isZero(_minePredSlot),
+   $0,
+   if(
+      _mineFullSlot,
+      if(_mineHardens($1), _mineHarder($0), $0),
+      _mineEased($0)
+   )
+)
+
+// $0 B, $1 C -> the full-slot count the successor must carry: reset when the
+// run completes, one more on a full slot, unchanged over empty slots
+func _mineAdjustedC :
+if(
+   isZero(_minePredSlot),
+   $1,
+   if(
+      _mineFullSlot,
+      if(_mineHardens($1), u64/0, add($1, u64/1)),
+      $1
+   )
+)
+
+// PoW: the ECVRF output (RFC 9381) under the signer's key over
+// alpha = predecessor output ID || txSlot || nonce must end in >= K zero bits.
+// The proof and the nonce ride in this output's unlock parameters:
+//   [0:80)  pi     ECVRF-EDWARDS25519-SHA512-TAI proof (Gamma || c || s)
+//   [80:88) nonce  free, the miner's search variable
+// A VRF output is unique per (key, message), so an attempt costs a genuine
+// hash-to-curve plus a variable-base scalar multiplication under the miner's
+// key: nothing to increment or batch, and the key must be present, which is
+// what keeps the work non-outsourceable. (A hash over the signed transaction,
+// the previous work function, left the signature nonce free, so an attempt
+// could cost one point addition instead of a scalar multiplication.)
+// The predecessor ID binds the work to this transit, the slot to one target.
+func _mineProof  : slice(selfUnlockParameters, 0, 79)
+func _mineNonce  : slice(selfUnlockParameters, 80, 87)
+func _mineAlpha  : concat(inputIDByIndex(selfOutputIndex), txSlot, _mineNonce)
+func _mineBeta64 : tail(vrfProofToHash(_mineProof), 56)
+
+// Test on the low 64 bits (K < 64): clearing the low K bits must leave the
+// value unchanged. $0 = low-64-bit slice of the VRF output, $1 = K.
+func _minePoWOK : equal(lshift64(rshift64($0, $1), $1), $0)
+
+// chain ID this output's own chain constraint carries
+func _mineSelfChainID : parseInlineDataArgument(selfSiblingConstraint(chainConstraintIndex), 0, #chain)
+
+// ---- produced (successor) arm ----
+// The predecessor's consumed arm below validates every mutable field of the
+// successor, its payout option included. Pinned on the successor itself: that
+// it lives on the one mine chain, which is what makes mineLock invalid
+// anywhere else, that the miner which built it is on the version the ledger
+// expects now, and that its option is in range. (The genesis
+// mine output carries an explicit chain constraint and is inserted directly
+// into the state, never validated through this arm.)
+// $0 V  $1 O
+func _mineProduced :
+and(
+   selfIsProducedOutput,
+   require(equal(_mineSelfChainID, constMineChainID), !!!mineLock_is_only_valid_on_the_mine_chain),
+   require(equalUint($0, constMinerVersion), !!!mine_successor_must_carry_the_current_miner_version),
+   require(lessOrEqualThan(uint8Bytes($1), uint8Bytes(u64/3)), !!!mine_payout_option_must_be_at_most_3)
+)
+
+// ---- consumed (predecessor) arm: the full static transaction template ----
+// It is split into small groups only because a single EasyFL call is limited
+// to 15 arguments. Order matters: _mineShape runs first and short-circuits, so
+// its guards (chain continues, successor at index 0) protect the successor
+// accessors used by the later groups.
+
+// static shape: mining is open (no transit before constDisableMiningUntilSlot,
+// which gives a fresh network a quiet start before the race begins), the pace
+// M >= P (checked first: the retarget below counts empty slots as M - 1, which
+// a same-slot successor would underflow), exactly one input and two or three
+// produced outputs, the chain continues, its successor at index 0 is again a
+// mine output, and the chain is not exhausted by what this transit mints
+// (checked last: the minted amount is read off the successor and the reward
+// output the guards before it establish).
+// $0 R
+func _mineShape :
+and(
+   selfIsConsumedOutput,
+   require(lessOrEqualThan(uint8Bytes(constDisableMiningUntilSlot), uint8Bytes(txSlot)), !!!mining_is_disabled_until_the_start_slot),
+   require(lessOrEqualThan(uint8Bytes(constMineMinPace), uint8Bytes(_mineM)), !!!mine_pace_below_minimum),
+   require(equalUint(numInputs, u64/1), !!!mine_transaction_must_have_exactly_one_input),
+   require(or(equalUint(numProducedOutputs, u64/2), equalUint(numProducedOutputs, u64/3)), !!!mine_transaction_must_have_two_or_three_outputs),
+   require(equalUint(len(selfSiblingUnlockParams(chainConstraintIndex)), u64/1), !!!mine_chain_must_continue),
+   require(isZero(_mineSuccIdx), !!!mine_successor_must_be_at_output_index_0),
+   require(equal(parseBytecode(_mineSuccLock, 0x), #mineLock), !!!mine_successor_must_carry_mineLock),
+   require(lessOrEqualThan(uint8Bytes(_mineMinted), uint8Bytes($0)), !!!mine_chain_is_exhausted)
+)
+
+// successor state: mints what the payout option takes (balance unchanged,
+// inflation == minted), R decrements by it, B and C are retargeted by
+// _mineAdjustedB and _mineAdjustedC.
+// $0 R  $1 B  $2 C
+func _mineSuccessorState :
+and(
+   require(equalUint(tokenBalanceByOutputPath(_mineSuccPath), selfTokenBalanceValue), !!!mine_successor_balance_must_equal_predecessor),
+   require(equalUint(_mineSuccInflation, _mineMinted), !!!mine_successor_inflation_must_equal_the_minted_amount),
+   require(equalUint(_mineSuccArg(0), sub($0, _mineMinted)), !!!wrong_R_on_mine_successor),
+   require(equalUint(_mineSuccArg(1), _mineAdjustedB($1, $2)), !!!wrong_difficulty_on_mine_successor),
+   require(equalUint(_mineSuccArg(2), _mineAdjustedC($1, $2)), !!!wrong_full_slot_count_on_mine_successor)
+)
+
+// ---- the reward: three payout options, priced (kb/mine_payout_options.md) ----
+// The successor's O selects the layout. Every layout pins the signer as the
+// beneficiary, which is what keeps mining non-outsourceable: outsourcing the
+// key means risking the reward. A token on a plain output costs the miner
+// about six times a token in consensus and a token in a fresh delegation
+// nearly twice, so the profitable thing is to put the reward to work.
+//
+//   1 opening        [1] sigLock to the signer, constMineOpeningAmountProx;   [2] fee T   mints 15 + T
+//   2 new delegation [1] delegation origin, master the signer, any target,
+//                        constMineDelegationAmountProx;                       [2] fee T   mints 50 + T
+//   3 full           [1] one tag-along of A, sender the signer, any target,
+//                        any request payload                                             mints A
+//
+// The fee T is constMineTagAlongFee, fixed so it cannot buy inclusion or pay a
+// third party. Under option 3 the tag-along is the whole reward and the
+// target's payment at once: a transit is included only when a sequencer
+// consumes its tag-along, so a tag-along nobody takes is a transit nobody
+// includes, not idle capital.
+
+// $0 output index of the inclusion fee
+func _mineInclusionFee :
+and(
+   require(equal(parseBytecode(_mineOutLock($0), 0x), #tagAlong), !!!mine_inclusion_fee_must_be_a_tag_along),
+   require(equalUint(_mineOutAmount($0), constMineTagAlongFee), !!!mine_tag_along_fee_must_be_the_fixed_amount)
+)
+
+func _mineOpening :
+and(
+   require(equalUint(numProducedOutputs, u64/3), !!!mine_opening_payout_needs_three_outputs),
+   require(equal(parseBytecode(_mineOutLock(1), 0x), #sigLock), !!!mine_opening_payout_must_be_sig_locked),
+   require(equal(_mineOutIndexValue(1, 0), txHolderID(txSignatureData)), !!!mine_payout_must_go_to_the_transaction_signer),
+   require(equalUint(_mineOutAmount(1), _prox(constMineOpeningAmountProx)), !!!mine_opening_amount_must_be_the_opening_amount),
+   _mineInclusionFee(2)
+)
+
+func _mineNewDelegation :
+and(
+   require(equalUint(numProducedOutputs, u64/3), !!!mine_delegation_payout_needs_three_outputs),
+   require(equal(parseBytecode(_mineOutLock(1), 0x), #delegateLock), !!!mine_delegation_payout_must_be_a_delegation),
+   require(isChainOriginID(parseInlineDataArgument(_mineOutChain(1), 0, #chain)), !!!mine_delegation_payout_must_be_a_delegation_origin),
+   require(equal(_mineOutIndexValue(1, 0), txHolderID(txSignatureData)), !!!mine_delegation_master_must_be_the_transaction_signer),
+   require(equalUint(_mineOutAmount(1), _prox(constMineDelegationAmountProx)), !!!mine_delegation_amount_must_be_the_delegation_amount),
+   _mineInclusionFee(2)
+)
+
+func _mineFull :
+and(
+   require(equalUint(numProducedOutputs, u64/2), !!!mine_full_payout_needs_two_outputs),
+   require(equal(parseBytecode(_mineOutLock(1), 0x), #tagAlong), !!!mine_full_payout_must_be_a_tag_along),
+   require(equal(_mineOutIndexValue(1, 0), txHolderID(txSignatureData)), !!!mine_tag_along_sender_must_be_the_transaction_signer),
+   require(equalUint(_mineOutAmount(1), _mineAmount), !!!mine_full_payout_must_be_A)
+)
+
+// the option the successor declares selects the layout
+func _minePayout :
+or(
+   and(equalUint(_mineSuccArg(4), u64/1), _mineOpening),
+   and(equalUint(_mineSuccArg(4), u64/2), _mineNewDelegation),
+   and(equalUint(_mineSuccArg(4), u64/3), _mineFull),
+   require(false, !!!mine_successor_must_declare_a_payout_option_1_2_or_3)
+)
+
+// the amount this transit mints: the full A, or the reward output plus the
+// inclusion fee
+func _mineMinted :
+if(equalUint(_mineSuccArg(4), u64/3),
+   _mineAmount,
+   add(_mineOutAmount(1), constMineTagAlongFee))
+
+// VRF-bound proof of work at K = _mineRequiredK(B, M) = max(B - (M - P), E):
+// full B at the minimum pace, one bit easier per extra slot (M >= P is
+// guaranteed by _mineShape). The proof is verified under the transaction
+// signer's key, which _minePayoutAndFee pins as the payout holder: prover,
+// signer and payee are one key. $0 B
+func _minePaceAndPoW :
+and(
+   require(equalUint(len(selfUnlockParameters), u64/88), !!!mine_unlock_params_must_be_VRF_proof_and_nonce),
+   require(vrfVerify(signaturePublicKey(txSignatureData), _mineAlpha, _mineProof), !!!mine_VRF_proof_check_failed),
+   require(_minePoWOK(_mineBeta64, _mineRequiredK($0, _mineM)), !!!insufficient_mine_proof_of_work)
+)
+
+// $0 R  $1 B  $2 C
+func _mineConsumed :
+and(
+   _mineShape($0),
+   _mineSuccessorState($0, $1, $2),
+   _minePayout,
+   _minePaceAndPoW($1)
+)
+
+// $0 R  $1 B  $2 C  $3 V  $4 O
+func mineLock :
+and(
+   require(equal(selfBlockIndex, lockConstraintIndex), !!!locks_must_be_at_lockConstraintIndex),
+   or(
+      _mineProduced($3, $4),
+      _mineConsumed($0, $1, $2)
+   )
+)

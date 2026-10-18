@@ -1,0 +1,119 @@
+package glb
+
+import (
+	"encoding/hex"
+	"sync"
+	"time"
+
+	"github.com/lunfardo314/proxima/api/client"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var (
+	UseAlternativeTagAlongSequencer bool
+	TargetInclusionDepth            int
+)
+
+var displayEndpointOnce sync.Once
+
+// BindNodeAPIFlags binds the node-API flags of the command actually running.
+// Several command trees register the same keys, and a BindPFlag done once at
+// registration time leaves viper looking at whichever command's flag set was
+// bound last - so the flag is ignored everywhere else. Call it from
+// PersistentPreRun.
+func BindNodeAPIFlags(cmd *cobra.Command) {
+	for _, key := range []string{"api.node_url", "api.endpoint"} {
+		if f := cmd.Flags().Lookup(key); f != nil {
+			AssertNoError(viper.BindPFlag(key, f))
+		}
+	}
+	// the legacy flag is an exact alias of the current one, so an explicitly passed
+	// --api.endpoint must outrank a profile like any other flag. Without this it
+	// would lose to an 'api.node_url' read from the config file.
+	legacy := cmd.Flags().Lookup("api.endpoint")
+	current := cmd.Flags().Lookup("api.node_url")
+	if legacy != nil && legacy.Changed && (current == nil || !current.Changed) {
+		viper.Set("api.node_url", legacy.Value.String())
+	}
+}
+
+// NodeAPIURL returns the URL of the node API proxi talks to. The config key is
+// 'api.node_url'; 'api.endpoint' is the legacy name for the same value and is
+// still honoured, so older profiles keep working unchanged.
+func NodeAPIURL() string {
+	if url := viper.GetString("api.node_url"); url != "" {
+		return url
+	}
+	return viper.GetString("api.endpoint")
+}
+
+func GetClient(endpoint ...string) *client.APIClient {
+	endp := ""
+	if len(endpoint) > 0 {
+		endp = endpoint[0]
+	} else {
+		endp = NodeAPIURL()
+	}
+	Assertf(endp != "", "GetClient: node API endpoint not specified")
+	var timeout []time.Duration
+	if timeoutSec := viper.GetInt("api.timeout_sec"); timeoutSec > 0 {
+		timeout = []time.Duration{time.Duration(timeoutSec) * time.Second}
+	}
+	displayEndpointOnce.Do(func() {
+		if len(timeout) == 0 {
+			Infof("API endpoint: %s, default timeout", endp)
+		} else {
+			Infof("API endpoint: %s, timeout: %v", endp, timeout[0])
+		}
+	})
+	return client.NewWithGoogleDNS(endp, timeout...)
+}
+
+// InitLedgerFromNode populates the global ledger.L() singleton with
+// the library JSON(s) fetched from the node. After the wasm-style
+// refactor most proxi commands no longer call this; they go through
+// glb.GetTxLibrary() + glb.GetLedgerConstants() instead.
+//
+// Surviving callers (singleton-dependent on purpose):
+//   - proxi/node_cmd/chess_cmd/* — kept as the in-tree typed-builder
+//     + singleton reference; chess_poc itself uses ledger.L() internally.
+//   - proxi/util_cmd/inflation.go — eval-bound ChainInflationMultiStep.
+//   - proxi/snapshot_cmd/check.go — typed multistate snapshot parsers.
+func InitLedgerFromNode() {
+	clnt := GetClient()
+
+	// Fetch all upgrade libraries by walking the upgrade chain from latest back to genesis
+	libraries := make(map[uint32][]byte)
+	resp, err := clnt.GetLedgerDefinition(nil)
+	AssertNoError(err)
+
+	// Every library is accepted only with the proof that a branch's baseline
+	// state commits to it (kb/library_proof.md); the witnesses confirm the branch.
+	latestLib, c, err := txbuildercore.LibraryFromLedgerDefinition(&resp.LedgerDefinitionJSON)
+	AssertNoError(err)
+	AssertNoError(VerifyBranchWithWitnesses(c.BranchID))
+	showLedgerDescription(latestLib)
+	libraries[resp.UpgradeSlot] = []byte(resp.LibraryJSON)
+	Infof("fetched library for slot %d, hash = %s", resp.UpgradeSlot, resp.LibraryHash)
+
+	// Walk back through previous upgrades until we reach genesis (slot 0)
+	for resp.UpgradeSlot > 0 {
+		prevSlot := resp.PrevUpgradeSlot
+		resp, err = clnt.GetLedgerDefinition(&prevSlot)
+		AssertNoError(err)
+		_, _, err = txbuildercore.LibraryFromLedgerDefinition(&resp.LedgerDefinitionJSON)
+		AssertNoError(err)
+		libraries[resp.UpgradeSlot] = []byte(resp.LibraryJSON)
+		Infof("fetched library for slot %d, hash = %s", resp.UpgradeSlot, resp.LibraryHash)
+	}
+
+	ledger.MustInitLibraryCacheFromMap(libraries)
+	Infof("successfully connected to the node at %s", NodeAPIURL())
+	Infof("verbose = %v", IsVerbose())
+	h := ledger.L(base.MaxSlot).LibraryHash()
+	Infof("ledger library hash: %s", hex.EncodeToString(h[:]))
+}

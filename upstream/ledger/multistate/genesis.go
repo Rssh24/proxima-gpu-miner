@@ -1,0 +1,201 @@
+package multistate
+
+import (
+	"fmt"
+
+	"github.com/lunfardo314/proxima/global"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/txbuildercore"
+	"github.com/lunfardo314/proxima/util"
+	"github.com/lunfardo314/proxima/util/set256"
+	"github.com/lunfardo314/unitrie/common"
+	"github.com/lunfardo314/unitrie/immutable"
+)
+
+// WriteEmptyRootWithLedgerIdentity writes minimal ledger identity data as value of the empty key nil.
+// The identity contains only genesis time and description (truly immutable data).
+// Returns root of the empty trie.
+func WriteEmptyRootWithLedgerIdentity(identity *ledger.LedgerIdentity, store global.Store) (common.VCommitment, error) {
+	batch := store.BatchedWriter()
+	emptyRoot := immutable.MustInitRoot(batch, ledger.CommitmentModel, identity.Bytes())
+	if err := batch.Commit(); err != nil {
+		return nil, err
+	}
+	return emptyRoot, nil
+}
+
+// InitStateStoreFromGlobals initializes origin ledger state in the empty store.
+// Creates:
+// - Initial supply output (index 0)
+// - Stem output (index 1)
+// - Upgrade commitment UTXO (synthetic, index 255)
+// Also stores the library JSON in the upgrade DB partition at slot 0.
+// Returns root commitment to the genesis ledger state and genesis chainID.
+func InitStateStoreFromGlobals(store global.Store) (base.ChainID, common.VCommitment) {
+	lib := ledger.L(0)
+	// Create minimal identity from constants
+	identity := ledger.NewLedgerIdentity(lib.GenesisTimeUnix, lib.Description)
+	emptyRoot, err := WriteEmptyRootWithLedgerIdentity(identity, store)
+	util.AssertNoError(err)
+
+	// Store library JSON in upgrade DB partition at slot 0
+	libraryJSON := lib.DefinitionsJSON()
+	err = WriteUpgradeLibrary(store, 0, libraryJSON)
+	util.AssertNoError(err)
+
+	genesisAddr := ledger.SigLockFromED25519PublicKey(lib.GenesisControllerPublicKey())
+
+	initialSupply := lib.InitialSupply
+	// The mine chain dust C is carved out of the genesis output so total
+	// genesis supply stays constInitialSupply. R_init is a separate mintable
+	// ceiling carried in the mine output's lock, not part of genesis supply.
+	gout := ledger.GenesisOutput(initialSupply-1-ledger.GenesisMineChainDust, genesisAddr)
+	gStemOut := ledger.GenesisStemOutput()
+	// Controller mote output ensures the controller can always create transactions
+	dustOut := ledger.GenesisControllerDustOutput(genesisAddr)
+	// Fair-launch mine chain output (index 3)
+	mineOut := ledger.GenesisMineChainOutput()
+
+	// Create upgrade commitment UTXO for slot 0
+	// For slot 0, prevHash is the base library hash, prevSlot is MaxSlot
+	libraryHash := lib.LibraryHash()
+	prevLibraryHash := ledger.BaseLibraryHash()
+	upgradeOut := ledger.UpgradeUTXO(0, libraryHash, prevLibraryHash, base.MaxSlot)
+
+	updatable := MustNewUpdatable(store, emptyRoot)
+	updatable.MustUpdate(genesisUpdateMutations(&gout.OutputWithID, gStemOut, dustOut, &mineOut.OutputWithID, upgradeOut), &RootRecordParams{
+		StemOutputID:      gStemOut.ID,
+		SeqID:             gout.ChainID,
+		SlotInflation:     initialSupply, // updateTrie invariant: produced == consumed + slotInflation
+		WriteEarliestSlot: true,
+	})
+	return gout.ChainID, updatable.Root()
+}
+
+func genesisUpdateMutations(genesisOut, genesisStemOut, dustOut, mineOut, upgradeOut *ledger.OutputWithID) *Mutations {
+	ret := NewMutations()
+	ret.InsertAddOutputMutation(genesisOut.ID, genesisOut.Output)
+	ret.InsertAddOutputMutation(genesisStemOut.ID, genesisStemOut.Output)
+	ret.InsertAddOutputMutation(dustOut.ID, dustOut.Output)
+	ret.InsertAddOutputMutation(mineOut.ID, mineOut.Output)
+	// Use raw clone for upgrade UTXO since it doesn't have a standard lock
+	ret.InsertAddOutputMutationRaw(upgradeOut.ID, upgradeOut.Output)
+	var unspent set256.Set256
+	unspent.InsertRange(0, 4) // 4 real genesis outputs: indices 0-3 (mine chain at 3)
+	ret.InsertAddTxMutation(base.GenesisTransactionID(), unspent)
+	return ret
+}
+
+// ScanGenesisState scans the genesis state and returns constants and root commitment.
+// It loads the library from the upgrade DB partition (slot 0).
+func ScanGenesisState(stateStore global.Store) (*txbuildercore.Constants, common.VCommitment, error) {
+	var genesisRootRecord RootRecord
+
+	// expecting a single branch in the genesis state
+	fetched, moreThan1 := false, false
+	IterateRootRecords(stateStore, func(_ base.TransactionID, rootData RootRecord) bool {
+		if fetched {
+			moreThan1 = true
+			return false
+		}
+		genesisRootRecord = rootData
+		fetched = true
+		return true
+	})
+	if !fetched || moreThan1 {
+		return nil, nil, fmt.Errorf("ScanGenesisState: exactly 1 branch expected. Not a genesis state")
+	}
+
+	branchData := FetchBranchDataByRoot(stateStore, genesisRootRecord)
+	rdr := MustNewSugaredReadableState(stateStore, branchData.Root)
+
+	// Load library from upgrade DB partition (slot 0)
+	jsonData, found := GetUpgradeLibraryDirect(stateStore, 0)
+	if !found {
+		return nil, nil, fmt.Errorf("ScanGenesisState: library not found in upgrade partition at slot 0")
+	}
+	lib, err := ledger.ParseLibraryFromJSON(jsonData, ledger.GetEmbeddedFunctionResolver)
+	if err != nil {
+		return nil, nil, fmt.Errorf("ScanGenesisState: failed to parse library: %w", err)
+	}
+
+	genesisOid := base.GenesisOutputID()
+	out, err := rdr.GetOutputErr(genesisOid)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GetOutputErr(%s): %w", genesisOid.StringShort(), err)
+	}
+	constants := ledger.ConstantsFromLibrary(lib)
+	// Genesis output has initialSupply - 1 - mineChainDust tokens; the remaining
+	// 1 token is in the controller mote output and mineChainDust is in the mine
+	// chain output (index 3).
+	expectedGenesis := constants.InitialSupply - 1 - ledger.GenesisMineChainDust
+	if out.TokenBalance() != expectedGenesis {
+		return nil, nil, fmt.Errorf("different amounts in genesis output and state definitions: got %d, expected %d",
+			out.TokenBalance(), expectedGenesis)
+	}
+	return constants, branchData.Root, nil
+}
+
+// InitLedgerFromStore initializes the ledger library cache from the state store.
+// It loads libraries from the upgrade DB partition and handles pending upgrades.
+func InitLedgerFromStore(stateStore global.Store) {
+	// Handle pending upgrade if one exists
+	if ledger.PendingUpgrade != nil {
+		storePendingUpgrade(stateStore, ledger.PendingUpgrade)
+	}
+
+	// Initialize the library cache with the state store
+	ledger.MustInitLibraryCache(stateStore)
+}
+
+// storePendingUpgrade stores the library for a pending upgrade in the DB partition.
+// If the upgrade already exists in the DB partition, this is a no-op (idempotent).
+func storePendingUpgrade(stateStore global.Store, pending *ledger.UpgradeDefinition) {
+	// Check if upgrade already exists in DB partition
+	if _, found := GetUpgradeLibraryDirect(stateStore, pending.Slot); found {
+		// Upgrade already stored, nothing more to do
+		return
+	}
+
+	// Find the previous library to build upon
+	prevSlot, prevJSON := findPreviousLibrary(stateStore, pending.Slot)
+	util.Assertf(prevJSON != nil, "no previous library found for pending upgrade at slot %d", pending.Slot)
+
+	// Build the upgraded library
+	newJSON, err := pending.Build(prevJSON)
+	util.Assertf(err == nil, "failed to build pending upgrade library at slot %d (based on slot %d): %v",
+		pending.Slot, prevSlot, err)
+
+	// Store the upgraded library in the DB partition
+	// Using WriteUpgradeLibraryUnchecked because:
+	// 1. The Build function is trusted code from the upgrade definition
+	// 2. It builds on top of the previous library, preserving identity
+	// 3. Identity validation is still enforced for external inputs via WriteUpgradeLibrary
+	err = WriteUpgradeLibraryUnchecked(stateStore, pending.Slot, newJSON)
+	util.AssertNoError(err)
+}
+
+// findPreviousLibrary finds the most recent library before the given slot.
+// Returns the slot and JSON data of the previous library.
+func findPreviousLibrary(stateStore global.Store, beforeSlot uint32) (uint32, []byte) {
+	var foundSlot uint32
+	var foundJSON []byte
+	found := false
+
+	IterateUpgradeLibraries(stateStore, func(slot uint32, jsonData []byte) bool {
+		if slot < beforeSlot {
+			if !found || slot > foundSlot {
+				foundSlot = slot
+				foundJSON = jsonData
+				found = true
+			}
+		}
+		return true
+	})
+
+	if !found {
+		return 0, nil
+	}
+	return foundSlot, foundJSON
+}

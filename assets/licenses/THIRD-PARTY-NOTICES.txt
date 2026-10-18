@@ -1,0 +1,525 @@
+THIRD-PARTY NOTICES — Proxima GPU Miner Windows beta 0.1.0
+
+This community miner contains Proxima, independent local integration code,
+the Go runtime, and the Python embedded runtime. It is not an official
+Proxima or GPU-vendor product. No vendor endorsement is implied.
+
+Proxima source: https://github.com/lunfardo314/proxima
+Pinned source commit: 60515d0074e63e467de6d63532c1236c1bec332a
+Official release: v1.0.2-take1. The official source was not modified for this build.
+Proxima is MIT licensed; see Proxima-LICENSE.txt.
+
+The local OpenCL integration and application are MIT licensed; see
+Miner-LICENSE.txt and the root LICENSE.txt. Selected curve and SHA-512
+primitives derive from the public-domain TweetNaCl implementation:
+https://tweetnacl.cr.yp.to/ . Its original source is included at miner/tweetnacl.c.
+
+Go runtime notices: Go-LICENSE.txt and Go-PATENTS.txt.
+Additional linked standard-library notices are under go-runtime/ when present.
+Python runtime and bundled third-party notices: Python-LICENSE.txt,
+also preserved at tools/python/LICENSE.txt. Python itself was not modified;
+only its import-path configuration was adjusted for this application.
+
+dependencies.json records the exact Go modules linked into the three native
+helper binaries, along with the applicable notice files under modules/.
+The GUI and balance viewer are separately built Go standard-library applications
+and are covered by the Go runtime notice and the application's MIT license.
+Module versions, binary hashes, and build flags are recorded for reproducibility.
+
+The github.com/golang/freetype component is used under the FreeType License
+option, not its alternative GPL option. This software is based in part on
+the work of the FreeType Team (https://www.freetype.org/). See the preserved
+LICENSE and LICENSES/ftl.txt for its full terms and original copyright notice.
+
+The MPL-2.0-covered github.com/hashicorp/golang-lru v1.0.2 and
+github.com/libp2p/go-yamux/v5 v5.1.0 sources are included unmodified under
+licenses/source/. Those covered source files remain governed by MPL-2.0;
+their full license texts are included with the sources and under modules/.
+
+The OpenCL loader and GPU-vendor sensor libraries are supplied by the recipient's
+installed GPU drivers and are not included in this package. No GPU driver or
+compiler toolchain is redistributed.
+
+The individual license texts govern their respective components. This index
+does not replace those texts or offer a legal opinion.
+
+Linked module notices:
+
+codeberg.org/go-fonts/liberation v0.5.0
+  licenses/modules/codeberg.org_go-fonts_liberation_v0.5.0/LICENSE
+  licenses/modules/codeberg.org_go-fonts_liberation_v0.5.0/LICENSE-SIL
+
+codeberg.org/go-latex/latex v0.2.0
+  licenses/modules/codeberg.org_go-latex_latex_v0.2.0/LICENSE
+
+codeberg.org/go-pdf/fpdf v0.11.1
+  licenses/modules/codeberg.org_go-pdf_fpdf_v0.11.1/LICENSE
+
+filippo.io/bigmod v0.1.1-0.20260103110540-f8a47775ebe5
+  licenses/modules/filippo.io_bigmod_v0.1.1-0.20260103110540-f8a47775ebe5/LICENSE
+
+filippo.io/edwards25519 v1.2.0
+  licenses/modules/filippo.io_edwards25519_v1.2.0/LICENSE
+
+filippo.io/keygen v1.0.0
+  licenses/modules/filippo.io_keygen_v1.0.0/LICENSE
+
+git.sr.ht/~sbinet/gg v0.7.0
+  licenses/modules/git.sr.ht__sbinet_gg_v0.7.0/LICENSE.md
+
+github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b
+  licenses/modules/github.com_ajstarks_svgo_v0.0.0-20211024235047-1546f124cd8b/LICENSE
+  licenses/modules/github.com_ajstarks_svgo_v0.0.0-20211024235047-1546f124cd8b/LICENSE-link.txt
+
+github.com/benbjohnson/clock v1.3.5
+  licenses/modules/github.com_benbjohnson_clock_v1.3.5/LICENSE
+
+github.com/beorn7/perks v1.0.1
+  licenses/modules/github.com_beorn7_perks_v1.0.1/LICENSE
+
+github.com/cespare/xxhash/v2 v2.3.0
+  licenses/modules/github.com_cespare_xxhash_v2_v2.3.0/LICENSE.txt
+
+github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+  licenses/modules/github.com_davecgh_go-spew_v1.1.2-0.20180830191138-d8f796af33cc/LICENSE
+
+github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c
+  licenses/modules/github.com_davidlazar_go-crypto_v0.0.0-20200604182044-b73af7476f6c/LICENSE
+
+github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
+  licenses/modules/github.com_decred_dcrd_dcrec_secp256k1_v4_v4.4.1/LICENSE
+
+github.com/dgraph-io/badger/v4 v4.9.4
+  licenses/modules/github.com_dgraph-io_badger_v4_v4.9.4/LICENSE
+
+github.com/dgraph-io/ristretto/v2 v2.4.2
+  licenses/modules/github.com_dgraph-io_ristretto_v2_v2.4.2/LICENSE
+  licenses/modules/github.com_dgraph-io_ristretto_v2_v2.4.2/z/LICENSE
+
+github.com/dunglas/httpsfv v1.1.0
+  licenses/modules/github.com_dunglas_httpsfv_v1.1.0/LICENSE
+
+github.com/dustin/go-humanize v1.0.1
+  licenses/modules/github.com_dustin_go-humanize_v1.0.1/LICENSE
+
+github.com/filecoin-project/go-clock v0.1.0
+  licenses/modules/github.com_filecoin-project_go-clock_v0.1.0/LICENSE
+
+github.com/flynn/noise v1.1.0
+  licenses/modules/github.com_flynn_noise_v1.1.0/LICENSE
+
+github.com/fsnotify/fsnotify v1.10.1
+  licenses/modules/github.com_fsnotify_fsnotify_v1.10.1/LICENSE
+
+github.com/gammazero/deque v1.2.1
+  licenses/modules/github.com_gammazero_deque_v1.2.1/LICENSE
+
+github.com/go-logr/logr v1.4.3
+  licenses/modules/github.com_go-logr_logr_v1.4.3/LICENSE
+
+github.com/go-logr/stdr v1.2.2
+  licenses/modules/github.com_go-logr_stdr_v1.2.2/LICENSE
+
+github.com/go-viper/mapstructure/v2 v2.5.0
+  licenses/modules/github.com_go-viper_mapstructure_v2_v2.5.0/LICENSE
+
+github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+  licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSE
+  licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSES/ftl.txt
+  licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSES/gpl.txt
+
+github.com/google/flatbuffers v25.12.19+incompatible
+  licenses/modules/github.com_google_flatbuffers_v25.12.19_incompatible/LICENSE
+
+github.com/google/gopacket v1.1.19
+  licenses/modules/github.com_google_gopacket_v1.1.19/LICENSE
+
+github.com/google/uuid v1.6.0
+  licenses/modules/github.com_google_uuid_v1.6.0/LICENSE
+
+github.com/gorilla/websocket v1.5.3
+  licenses/modules/github.com_gorilla_websocket_v1.5.3/LICENSE
+
+github.com/hashicorp/golang-lru v1.0.2
+  licenses/modules/github.com_hashicorp_golang-lru_v1.0.2/LICENSE
+
+github.com/huin/goupnp v1.3.0
+  licenses/modules/github.com_huin_goupnp_v1.3.0/LICENSE
+
+github.com/inconshreveable/mousetrap v1.1.0
+  licenses/modules/github.com_inconshreveable_mousetrap_v1.1.0/LICENSE
+
+github.com/ipfs/boxo v0.41.0
+  licenses/modules/github.com_ipfs_boxo_v0.41.0/LICENSE.md
+
+github.com/ipfs/go-cid v0.6.2
+  licenses/modules/github.com_ipfs_go-cid_v0.6.2/LICENSE
+
+github.com/ipfs/go-datastore v0.9.2
+  licenses/modules/github.com_ipfs_go-datastore_v0.9.2/LICENSE
+
+github.com/ipfs/go-log/v2 v2.9.2
+  licenses/modules/github.com_ipfs_go-log_v2_v2.9.2/LICENSE
+
+github.com/ipld/go-ipld-prime v0.24.0
+  licenses/modules/github.com_ipld_go-ipld-prime_v0.24.0/LICENSE
+
+github.com/jackpal/go-nat-pmp v1.0.2
+  licenses/modules/github.com_jackpal_go-nat-pmp_v1.0.2/LICENSE
+
+github.com/jbenet/go-temp-err-catcher v0.1.0
+  licenses/modules/github.com_jbenet_go-temp-err-catcher_v0.1.0/LICENSE
+
+github.com/klauspost/compress v1.19.0
+  licenses/modules/github.com_klauspost_compress_v1.19.0/internal/snapref/LICENSE
+  licenses/modules/github.com_klauspost_compress_v1.19.0/LICENSE
+  licenses/modules/github.com_klauspost_compress_v1.19.0/s2/LICENSE
+  licenses/modules/github.com_klauspost_compress_v1.19.0/snappy/LICENSE
+  licenses/modules/github.com_klauspost_compress_v1.19.0/zstd/internal/xxhash/LICENSE.txt
+
+github.com/klauspost/cpuid/v2 v2.4.0
+  licenses/modules/github.com_klauspost_cpuid_v2_v2.4.0/LICENSE
+
+github.com/koron/go-ssdp v0.9.1
+  licenses/modules/github.com_koron_go-ssdp_v0.9.1/LICENSE
+
+github.com/libp2p/go-buffer-pool v0.1.0
+  licenses/modules/github.com_libp2p_go-buffer-pool_v0.1.0/LICENSE
+  licenses/modules/github.com_libp2p_go-buffer-pool_v0.1.0/LICENSE-BSD
+
+github.com/libp2p/go-cidranger v1.1.0
+  licenses/modules/github.com_libp2p_go-cidranger_v1.1.0/LICENSE
+
+github.com/libp2p/go-flow-metrics v0.3.0
+  licenses/modules/github.com_libp2p_go-flow-metrics_v0.3.0/LICENSE
+
+github.com/libp2p/go-libp2p-asn-util v0.4.1
+  licenses/modules/github.com_libp2p_go-libp2p-asn-util_v0.4.1/LICENSE
+
+github.com/libp2p/go-libp2p-kad-dht v0.41.0
+  licenses/modules/github.com_libp2p_go-libp2p-kad-dht_v0.41.0/LICENSE
+
+github.com/libp2p/go-libp2p-kbucket v0.9.0
+  licenses/modules/github.com_libp2p_go-libp2p-kbucket_v0.9.0/LICENSE
+
+github.com/libp2p/go-libp2p-record v0.3.1
+  licenses/modules/github.com_libp2p_go-libp2p-record_v0.3.1/LICENSE
+
+github.com/libp2p/go-libp2p-routing-helpers v0.7.5
+  licenses/modules/github.com_libp2p_go-libp2p-routing-helpers_v0.7.5/LICENSE
+
+github.com/libp2p/go-libp2p v0.48.0
+  licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/LICENSE
+  licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/net/nat/internal/nat/LICENSE
+  licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/transport/websocket/LICENSE-APACHE
+  licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/transport/websocket/LICENSE-MIT
+
+github.com/libp2p/go-msgio v0.3.0
+  licenses/modules/github.com_libp2p_go-msgio_v0.3.0/LICENSE
+
+github.com/libp2p/go-netroute v0.4.0
+  licenses/modules/github.com_libp2p_go-netroute_v0.4.0/LICENSE
+
+github.com/libp2p/go-reuseport v0.4.0
+  licenses/modules/github.com_libp2p_go-reuseport_v0.4.0/LICENSE
+
+github.com/libp2p/go-yamux/v5 v5.1.0
+  licenses/modules/github.com_libp2p_go-yamux_v5_v5.1.0/LICENSE
+  licenses/modules/github.com_libp2p_go-yamux_v5_v5.1.0/LICENSE-BSD
+
+github.com/lunfardo314/easyfl v0.0.0-20261012131332-8e4d838e7b0b
+
+github.com/lunfardo314/proxima 60515d0074e63e467de6d63532c1236c1bec332a
+  licenses/modules/github.com_lunfardo314_proxima_pinned-60515d0074e6/LICENSE
+
+github.com/lunfardo314/unitrie v0.0.0-20260906143222-28d8bd0df646
+  licenses/modules/github.com_lunfardo314_unitrie_v0.0.0-20260906143222-28d8bd0df646/LICENSE
+
+github.com/mattn/go-isatty v0.0.23
+  licenses/modules/github.com_mattn_go-isatty_v0.0.23/LICENSE
+
+github.com/minio/sha256-simd v1.0.1
+  licenses/modules/github.com_minio_sha256-simd_v1.0.1/LICENSE
+
+github.com/mr-tron/base58 v1.3.0
+  licenses/modules/github.com_mr-tron_base58_v1.3.0/LICENSE
+
+github.com/multiformats/go-base32 v0.1.0
+  licenses/modules/github.com_multiformats_go-base32_v0.1.0/LICENSE
+
+github.com/multiformats/go-base36 v0.2.0
+  licenses/modules/github.com_multiformats_go-base36_v0.2.0/LICENSE.md
+
+github.com/multiformats/go-multiaddr-dns v0.6.0
+  licenses/modules/github.com_multiformats_go-multiaddr-dns_v0.6.0/LICENSE
+
+github.com/multiformats/go-multiaddr-fmt v0.1.0
+  licenses/modules/github.com_multiformats_go-multiaddr-fmt_v0.1.0/LICENSE
+
+github.com/multiformats/go-multiaddr v0.16.1
+  licenses/modules/github.com_multiformats_go-multiaddr_v0.16.1/LICENSE
+
+github.com/multiformats/go-multibase v0.3.0
+  licenses/modules/github.com_multiformats_go-multibase_v0.3.0/LICENSE
+
+github.com/multiformats/go-multicodec v0.10.0
+  licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE
+  licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE-APACHE
+  licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE-MIT
+
+github.com/multiformats/go-multihash v0.2.3
+  licenses/modules/github.com_multiformats_go-multihash_v0.2.3/LICENSE
+
+github.com/multiformats/go-multistream v0.6.1
+  licenses/modules/github.com_multiformats_go-multistream_v0.6.1/LICENSE
+
+github.com/multiformats/go-varint v0.1.0
+  licenses/modules/github.com_multiformats_go-varint_v0.1.0/LICENSE
+
+github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+  licenses/modules/github.com_munnerz_goautoneg_v0.0.0-20191010083416-a7dc8b61c822/LICENSE
+
+github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
+  licenses/modules/github.com_pbnjay_memory_v0.0.0-20210728143218-7b4eea64cf58/LICENSE
+
+github.com/pelletier/go-toml/v2 v2.4.3
+  licenses/modules/github.com_pelletier_go-toml_v2_v2.4.3/LICENSE
+
+github.com/pion/datachannel v1.6.2
+  licenses/modules/github.com_pion_datachannel_v1.6.2/LICENSE
+  licenses/modules/github.com_pion_datachannel_v1.6.2/LICENSES/MIT.txt
+
+github.com/pion/dtls/v3 v3.1.5
+  licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSE
+  licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSES/CC0-1.0.txt
+  licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSES/MIT.txt
+
+github.com/pion/ice/v4 v4.3.0
+  licenses/modules/github.com_pion_ice_v4_v4.3.0/LICENSE
+  licenses/modules/github.com_pion_ice_v4_v4.3.0/LICENSES/MIT.txt
+
+github.com/pion/interceptor v0.1.45
+  licenses/modules/github.com_pion_interceptor_v0.1.45/LICENSE
+  licenses/modules/github.com_pion_interceptor_v0.1.45/LICENSES/MIT.txt
+
+github.com/pion/logging v0.2.4
+  licenses/modules/github.com_pion_logging_v0.2.4/LICENSE
+  licenses/modules/github.com_pion_logging_v0.2.4/LICENSES/MIT.txt
+
+github.com/pion/mdns/v2 v2.1.0
+  licenses/modules/github.com_pion_mdns_v2_v2.1.0/LICENSE
+  licenses/modules/github.com_pion_mdns_v2_v2.1.0/LICENSES/MIT.txt
+
+github.com/pion/randutil v0.1.0
+  licenses/modules/github.com_pion_randutil_v0.1.0/LICENSE
+
+github.com/pion/rtcp v1.2.17
+  licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSE
+  licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSES/CC0-1.0.txt
+  licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSES/MIT.txt
+
+github.com/pion/rtp v1.10.3
+  licenses/modules/github.com_pion_rtp_v1.10.3/LICENSE
+  licenses/modules/github.com_pion_rtp_v1.10.3/LICENSES/MIT.txt
+
+github.com/pion/sctp v1.11.0
+  licenses/modules/github.com_pion_sctp_v1.11.0/LICENSE
+  licenses/modules/github.com_pion_sctp_v1.11.0/LICENSES/MIT.txt
+
+github.com/pion/sdp/v3 v3.0.19
+  licenses/modules/github.com_pion_sdp_v3_v3.0.19/LICENSE
+  licenses/modules/github.com_pion_sdp_v3_v3.0.19/LICENSES/MIT.txt
+
+github.com/pion/srtp/v3 v3.0.12
+  licenses/modules/github.com_pion_srtp_v3_v3.0.12/LICENSE
+  licenses/modules/github.com_pion_srtp_v3_v3.0.12/LICENSES/MIT.txt
+
+github.com/pion/stun/v3 v3.1.6
+  licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSE
+  licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/BSD-3-Clause.txt
+  licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/CC0-1.0.txt
+  licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/MIT.txt
+
+github.com/pion/transport/v4 v4.0.2
+  licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSE
+  licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSES/BSD-3-Clause.txt
+  licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSES/MIT.txt
+
+github.com/pion/turn/v5 v5.0.12
+  licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSE
+  licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSES/CC0-1.0.txt
+  licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSES/MIT.txt
+
+github.com/pion/webrtc/v4 v4.2.16
+  licenses/modules/github.com_pion_webrtc_v4_v4.2.16/LICENSE
+  licenses/modules/github.com_pion_webrtc_v4_v4.2.16/LICENSES/MIT.txt
+
+github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+  licenses/modules/github.com_pmezard_go-difflib_v1.0.1-0.20181226105442-5d4384ee4fb2/LICENSE
+
+github.com/polydawn/refmt v0.90.0
+  licenses/modules/github.com_polydawn_refmt_v0.90.0/LICENSE
+
+github.com/prometheus/client_golang v1.23.2
+  licenses/modules/github.com_prometheus_client_golang_v1.23.2/LICENSE
+  licenses/modules/github.com_prometheus_client_golang_v1.23.2/NOTICE
+
+github.com/prometheus/client_model v0.6.2
+  licenses/modules/github.com_prometheus_client_model_v0.6.2/LICENSE
+  licenses/modules/github.com_prometheus_client_model_v0.6.2/NOTICE
+
+github.com/prometheus/common v0.70.0
+  licenses/modules/github.com_prometheus_common_v0.70.0/LICENSE
+  licenses/modules/github.com_prometheus_common_v0.70.0/NOTICE
+
+github.com/quic-go/qpack v0.6.0
+  licenses/modules/github.com_quic-go_qpack_v0.6.0/LICENSE.md
+
+github.com/quic-go/quic-go v0.60.0
+  licenses/modules/github.com_quic-go_quic-go_v0.60.0/LICENSE
+
+github.com/quic-go/webtransport-go v0.11.1
+  licenses/modules/github.com_quic-go_webtransport-go_v0.11.1/LICENSE
+
+github.com/sagikazarmark/locafero v0.12.0
+  licenses/modules/github.com_sagikazarmark_locafero_v0.12.0/LICENSE
+
+github.com/spaolacci/murmur3 v1.1.0
+  licenses/modules/github.com_spaolacci_murmur3_v1.1.0/LICENSE
+
+github.com/spf13/afero v1.15.0
+  licenses/modules/github.com_spf13_afero_v1.15.0/LICENSE.txt
+
+github.com/spf13/cast v1.10.0
+  licenses/modules/github.com_spf13_cast_v1.10.0/LICENSE
+
+github.com/spf13/cobra v1.10.2
+  licenses/modules/github.com_spf13_cobra_v1.10.2/LICENSE.txt
+
+github.com/spf13/pflag v1.0.10
+  licenses/modules/github.com_spf13_pflag_v1.0.10/LICENSE
+
+github.com/spf13/viper v1.21.0
+  licenses/modules/github.com_spf13_viper_v1.21.0/LICENSE
+
+github.com/stretchr/testify v1.11.1
+  licenses/modules/github.com_stretchr_testify_v1.11.1/LICENSE
+
+github.com/subosito/gotenv v1.6.0
+  licenses/modules/github.com_subosito_gotenv_v1.6.0/LICENSE
+
+github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1
+  licenses/modules/github.com_whyrusleeping_go-keyspace_v0.0.0-20160322163242-5b898ac5add1/LICENSE
+
+github.com/whyrusleeping/multiaddr-filter v0.0.0-20160516205228-e903e4adabd7
+  licenses/modules/github.com_whyrusleeping_multiaddr-filter_v0.0.0-20160516205228-e903e4adabd7/LICENSE
+
+github.com/wlynxg/anet v0.0.5
+  licenses/modules/github.com_wlynxg_anet_v0.0.5/LICENSE
+
+go.opentelemetry.io/auto/sdk v1.2.1
+  licenses/modules/go.opentelemetry.io_auto_sdk_v1.2.1/LICENSE
+
+go.opentelemetry.io/otel/metric v1.44.0
+  licenses/modules/go.opentelemetry.io_otel_metric_v1.44.0/LICENSE
+
+go.opentelemetry.io/otel/trace v1.44.0
+  licenses/modules/go.opentelemetry.io_otel_trace_v1.44.0/LICENSE
+
+go.opentelemetry.io/otel v1.44.0
+  licenses/modules/go.opentelemetry.io_otel_v1.44.0/LICENSE
+
+go.uber.org/dig v1.19.0
+  licenses/modules/go.uber.org_dig_v1.19.0/LICENSE
+
+go.uber.org/fx v1.24.0
+  licenses/modules/go.uber.org_fx_v1.24.0/LICENSE
+
+go.uber.org/multierr v1.11.0
+  licenses/modules/go.uber.org_multierr_v1.11.0/LICENSE.txt
+
+go.uber.org/zap v1.28.0
+  licenses/modules/go.uber.org_zap_v1.28.0/LICENSE
+
+go.yaml.in/yaml/v3 v3.0.4
+  licenses/modules/go.yaml.in_yaml_v3_v3.0.4/LICENSE
+  licenses/modules/go.yaml.in_yaml_v3_v3.0.4/NOTICE
+
+golang.org/x/crypto v0.56.0
+  licenses/modules/golang.org_x_crypto_v0.56.0/LICENSE
+  licenses/modules/golang.org_x_crypto_v0.56.0/PATENTS
+
+golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597
+  licenses/modules/golang.org_x_exp_v0.0.0-20260709172345-9ea1abe57597/LICENSE
+  licenses/modules/golang.org_x_exp_v0.0.0-20260709172345-9ea1abe57597/PATENTS
+
+golang.org/x/image v0.45.0
+  licenses/modules/golang.org_x_image_v0.45.0/LICENSE
+  licenses/modules/golang.org_x_image_v0.45.0/PATENTS
+
+golang.org/x/net v0.57.0
+  licenses/modules/golang.org_x_net_v0.57.0/LICENSE
+  licenses/modules/golang.org_x_net_v0.57.0/PATENTS
+
+golang.org/x/sync v0.22.0
+  licenses/modules/golang.org_x_sync_v0.22.0/LICENSE
+  licenses/modules/golang.org_x_sync_v0.22.0/PATENTS
+
+golang.org/x/sys v0.47.0
+  licenses/modules/golang.org_x_sys_v0.47.0/LICENSE
+  licenses/modules/golang.org_x_sys_v0.47.0/PATENTS
+
+golang.org/x/term v0.45.0
+  licenses/modules/golang.org_x_term_v0.45.0/LICENSE
+  licenses/modules/golang.org_x_term_v0.45.0/PATENTS
+
+golang.org/x/text v0.41.0
+  licenses/modules/golang.org_x_text_v0.41.0/LICENSE
+  licenses/modules/golang.org_x_text_v0.41.0/PATENTS
+
+golang.org/x/time v0.15.0
+  licenses/modules/golang.org_x_time_v0.15.0/LICENSE
+  licenses/modules/golang.org_x_time_v0.15.0/PATENTS
+
+golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
+  licenses/modules/golang.org_x_xerrors_v0.0.0-20240903120638-7835f813f4da/LICENSE
+  licenses/modules/golang.org_x_xerrors_v0.0.0-20240903120638-7835f813f4da/PATENTS
+
+gonum.org/v1/gonum v0.17.0
+  licenses/modules/gonum.org_v1_gonum_v0.17.0/LICENSE
+
+gonum.org/v1/plot v0.17.0
+  licenses/modules/gonum.org_v1_plot_v0.17.0/LICENSE
+
+google.golang.org/protobuf v1.36.11
+  licenses/modules/google.golang.org_protobuf_v1.36.11/LICENSE
+  licenses/modules/google.golang.org_protobuf_v1.36.11/PATENTS
+
+gopkg.in/yaml.v2 v2.4.0
+  licenses/modules/gopkg.in_yaml.v2_v2.4.0/LICENSE
+  licenses/modules/gopkg.in_yaml.v2_v2.4.0/LICENSE.libyaml
+  licenses/modules/gopkg.in_yaml.v2_v2.4.0/NOTICE
+
+gopkg.in/yaml.v3 v3.0.1
+  licenses/modules/gopkg.in_yaml.v3_v3.0.1/LICENSE
+  licenses/modules/gopkg.in_yaml.v3_v3.0.1/NOTICE
+
+lukechampine.com/blake3 v1.4.1
+  licenses/modules/lukechampine.com_blake3_v1.4.1/LICENSE
+
+EASYFL — MISSING LICENSE FILE; REDISTRIBUTION PERMISSION CONFIRMED:
+github.com/lunfardo314/easyfl@v0.0.0-20261012131332-8e4d838e7b0b
+
+The pinned EasyFL dependency has no license file in its published Go module.
+On 2026-10-19 the official GitHub repository metadata reported license=null,
+and its license endpoint for commit 8e4d838e7b0b returned HTTP 404. Its exact
+commit file list and README provided no license grant. Proxima's MIT license
+is not being assumed to grant a license for this separate dependency.
+The package owner has confirmed that redistribution is authorized. This
+records that confirmation; it does not provide or invent a license text for
+EasyFL, and Proxima's MIT license is not assigned to this separate component.
+
+Primary references:
+https://github.com/lunfardo314/easyfl/tree/8e4d838e7b0b
+https://api.github.com/repos/lunfardo314/easyfl
+https://api.github.com/repos/lunfardo314/easyfl/license?ref=8e4d838e7b0b

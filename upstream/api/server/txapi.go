@@ -1,0 +1,312 @@
+package server
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/lunfardo314/proxima/api"
+	"github.com/lunfardo314/proxima/ledger"
+	"github.com/lunfardo314/proxima/ledger/base"
+	"github.com/lunfardo314/proxima/ledger/multistate"
+	"github.com/lunfardo314/proxima/ledger/transaction"
+)
+
+func (srv *server) registerTxAPIHandlers() {
+	// Compiles EasyFL script in the context of the ledger of the node and returns bytecode
+	// '/txapi/v1/compile_script?source=<script source in EasyFL>'
+	srv.addHandler(api.PathCompileScript, srv.compileScript)
+	// Decompiles bytecode in the context of the ledger of the node to EasyFL script
+	// '/txapi/v1/decompile_bytecode?bytecode=<hex-encoded bytecode>'
+	srv.addHandler(api.PathDecompileBytecode, srv.decompileBytecode)
+	// By given output id, finds raw output data on LRB state, parses it as a tuple
+	// and decompiles each of constraint scripts. Returns list of decompiled constraint scripts
+	// '/txapi/v1/parse_output?output_id=<hex-encoded output id>'
+	srv.addHandler(api.PathParseOutput, srv.parseOutput)
+	// By given raw data of the output, parses it as a tuple
+	// and decompiles each of constraint scripts. Returns list of decompiled constraint scripts
+	// Essential difference with the parse-output is that it does not need to assume particular LRB
+	// '/txapi/v1/parse_output_data?output_data=<hex-encoded output binary>'
+	srv.addHandler(api.PathParseOutputData, srv.parseOutputData)
+	// By given transaction id, returns raw transaction bytes (canonical form of tx) and metadata (if it exists)
+	// '/txapi/v1/get_txbytes?txid=<hex-encoded transaction id>'
+	srv.addHandler(api.PathGetTxBytes, srv.getTxBytes)
+	// By the given transaction id, returns parsed transaction in JSON form. The JSON form contains all elements
+	// of the transaction except signature, but it is not a canonical form. Primary purpose of JSON form of the transaction
+	// is to use it in frontends, like explorers and visualizers.
+	// '/txapi/v1/get_parsed_transaction?txid=<hex-encoded transaction id>'
+	srv.addHandler(api.PathGetParsedTransaction, srv.getParsedTransaction)
+	// By the given transaction id, returns compressed for of the DAG vertex. Its primary use is DAG visualizers
+	// '/txapi/v1/get_vertex_dep?txid=<hex-encoded transaction id>'
+	srv.addHandler(api.PathGetVertexWithDependencies, srv.getVertexWithDependencies)
+}
+
+func (srv *server) compileScript(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	lst, ok := r.URL.Query()["source"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "script source is expected")
+		return
+	}
+
+	_, _, bytecode, err := ledger.L(base.MaxSlot).CompileExpression(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("EasyFL compile error: '%v'", err))
+		return
+	}
+
+	resp := api.Bytecode{Bytecode: hex.EncodeToString(bytecode)}
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) decompileBytecode(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	lst, ok := r.URL.Query()["bytecode"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded bytecode is expected")
+		return
+	}
+
+	bytecode, err := hex.DecodeString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't decode hex string: '%v'", err))
+		return
+	}
+
+	src, err := ledger.L(base.MaxSlot).DecompileBytecode(bytecode)
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't decompile bytecode: '%v'", err))
+		return
+	}
+
+	resp := api.ScriptSource{Source: src}
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) parseOutput(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	lst, ok := r.URL.Query()["output_id"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded output data is expected")
+		return
+	}
+
+	oid, err := base.OutputIDFromHexString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't parse output id: %v", err))
+		return
+	}
+
+	var o *ledger.Output
+	err = srv.withLRB(func(rdr multistate.SugaredStateReader) error {
+		o = rdr.GetOutput(oid)
+		if o == nil {
+			return fmt.Errorf("no found %s in LRB", oid.String())
+		}
+		return nil
+	})
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't get output in LRB: %v", err))
+		return
+	}
+
+	resp := api.ParsedOutput{
+		Data:        hex.EncodeToString(o.Bytes()),
+		Constraints: o.LinesPlainSource().Slice(),
+		Amount:      o.TokenBalance(),
+		LockName:    o.Lock().Name(),
+	}
+	if cc := o.ChainConstraint(); cc != nil {
+		var chainID base.ChainID
+		if cc.IsOrigin() {
+			chainID = base.MakeOriginChainID(oid)
+		} else {
+			chainID = cc.ChainID
+		}
+		resp.ChainID = hex.EncodeToString(chainID[:])
+	}
+
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) parseOutputData(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	lst, ok := r.URL.Query()["output_data"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded output data is expected")
+		return
+	}
+
+	_, humanReadable := r.URL.Query()["human_readable"]
+
+	outBin, err := hex.DecodeString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't decode hex string: '%v'", err))
+		return
+	}
+
+	// API server uses latest library version for parsing outputs
+	o, err := ledger.OutputFromBytes(outBin)
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("can't parse output: '%v'", err))
+		return
+	}
+
+	var constr []string
+	if humanReadable {
+		constr = o.LinesPlainHR().Slice()
+	} else {
+		constr = o.LinesPlainSource().Slice()
+	}
+
+	resp := api.ParsedOutput{
+		Data:        hex.EncodeToString(outBin),
+		Constraints: constr,
+		Amount:      o.TokenBalance(),
+		LockName:    o.Lock().Name(),
+	}
+	if cc := o.ChainConstraint(); cc != nil {
+		resp.ChainID = hex.EncodeToString(cc.ChainID[:])
+	}
+
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) getTxBytes(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	var txid base.TransactionID
+	var err error
+
+	lst, ok := r.URL.Query()["txid"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded transaction id expected")
+		return
+	}
+	txid, err = base.TransactionIDFromHexString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("failed to parse transaction id from hex encoded string: '%v'", err))
+		return
+	}
+
+	txBytes := srv.TxBytesStore().GetTxBytes(&txid)
+	if len(txBytes) == 0 {
+		api.WriteErr(w, fmt.Sprintf("transaction %s has not been found in the txBytesStore", txid.String()))
+		return
+	}
+
+	// txstore stores raw bytes (no metadata prefix; metadata-refactor §7).
+	resp := api.TxBytes{
+		TxBytes: hex.EncodeToString(txBytes),
+	}
+
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) getParsedTransaction(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	var txid base.TransactionID
+	var err error
+
+	lst, ok := r.URL.Query()["txid"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded transaction id expected")
+		return
+	}
+	txid, err = base.TransactionIDFromHexString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("failed to parse transaction id from hex encoded string: '%v'", err))
+		return
+	}
+
+	txBytes := srv.TxBytesStore().GetTxBytes(&txid)
+	if len(txBytes) == 0 {
+		api.WriteErr(w, fmt.Sprintf("transaction %s has not been found in the txBytesStore", txid.String()))
+		return
+	}
+
+	// txstore stores raw bytes (no metadata prefix; metadata-refactor §7).
+	tx, err := transaction.ParseWithPartialValidation(txBytes)
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("internal error while parsing transaction: '%v'", err))
+		return
+	}
+
+	resp := api.JSONAbleFromTransaction(tx)
+
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}
+
+func (srv *server) getVertexWithDependencies(w http.ResponseWriter, r *http.Request) {
+	api.SetHeader(w)
+
+	var txid base.TransactionID
+	var err error
+
+	lst, ok := r.URL.Query()["txid"]
+	if !ok || len(lst) != 1 {
+		api.WriteErr(w, "hex encoded transaction id expected")
+		return
+	}
+	txid, err = base.TransactionIDFromHexString(lst[0])
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("failed to parse transaction id from hex encoded string: '%v'", err))
+		return
+	}
+
+	txBytes := srv.TxBytesStore().GetTxBytes(&txid)
+	if len(txBytes) == 0 {
+		api.WriteErr(w, fmt.Sprintf("transaction %s has not been found in the txBytesStore", txid.String()))
+		return
+	}
+
+	// txstore stores raw bytes (no metadata prefix; metadata-refactor §7).
+	tx, err := transaction.ParseWithPartialValidation(txBytes)
+	if err != nil {
+		api.WriteErr(w, fmt.Sprintf("internal error while parsing transaction: '%v'", err))
+		return
+	}
+	resp := api.VertexWithDependenciesFromTransaction(tx)
+	respBin, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		api.WriteErr(w, err.Error())
+		return
+	}
+	srv.writeResponse(w, respBin)
+}

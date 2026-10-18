@@ -1,0 +1,260 @@
+{
+  "versionData": "{\"txIntegrityValidatorPartialContext\":\"txIntegrityValidatorPartialContext0\", \"txIntegrityValidatorFullContext\":\"txIntegrityValidatorFullContext0\"}",
+  "functions": [
+    {
+      "sym": "constTargetBaseSupply",
+      "description": "Fair-launch target base supply T: the ceiling of base-token supply once mining exhausts R_init (= InitialSupply + R_init). Supply-relative policy (inflation dust threshold, coverage bounds) is anchored here, not on the smaller genesis supply, so it is invariant to the genesis/mining split",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "u64/1000000000000000"
+    },
+    {
+      "sym": "constInitialSupply",
+      "description": "Number of tokens minted at genesis (the bootstrap sequencer output): six per cent of constTargetBaseSupply. The rest (R_init) is minted by the fair-launch mine chain",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "div(mul(constTargetBaseSupply, u64/6), u64/100)"
+    },
+    {
+      "sym": "constGenesisControllerSignature",
+      "description": "Genesis controller's signature data (<sig type byte>+<signature proper>+<public key>) of concat(constDescription, constGenesisTimeUnix): carries the controller's public key and proves the key claims this library hash",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "0x{{.GenesisControllerSignatureHex}}"
+    },
+    {
+      "sym": "constGenesisTimeUnix",
+      "description": "Unix time in seconds when ledger was initiated. Timestamp 0|0 corresponds to the genesis time",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "u64/{{.GenesisTimeUnix}}"
+    },
+    {
+      "sym": "constTickDuration",
+      "description": "tick duration in nanoseconds. Default is 80ms",
+      "numArgs": 0,
+      "source": "u64/{{.TickDurationNano}}"
+    },
+    {
+      "sym": "constMaxTickValuePerSlot",
+      "description": "maximum value of ticks in the slot. Usually 127",
+      "numArgs": 0,
+      "source": "u64/{{.MaxTickValue}}"
+    },
+    {
+      "sym": "ticksPerSlot64",
+      "description": "number of ticks in the slot. Usually 128",
+      "numArgs": 0,
+      "source": "u64/{{.TicksPerSlot}}"
+    },
+    {
+      "sym": "constMaxNumberOfEndorsements",
+      "description": "up to 8 endorsements",
+      "numArgs": 0,
+      "source": "u64/8"
+    },
+    {
+      "sym": "constPreBranchConsolidationTicks",
+      "description": "number of last ticks in a slot when sequencer transaction cannot consume more than 2 UTXOs",
+      "numArgs": 0,
+      "source": "u64/25"
+    },
+    {
+      "sym": "constTransactionPace",
+      "description": "minimum number of ticks between non-sequencer transaction and its inputs",
+      "numArgs": 0,
+      "source": "u64/{{.TransactionPaceTicks}}"
+    },
+    {
+      "sym": "constTransactionPaceSequencer",
+      "description": "minimum number of ticks between sequencer transaction and its inputs and endorsed transactions",
+      "numArgs": 0,
+      "source": "u64/{{.TransactionPaceSequencerTicks}}"
+    },
+    {
+      "sym": "constAttachmentCostBudget",
+      "description": "maximum total attachment cost (pastCone + seqTx) for sequencer transaction validation",
+      "numArgs": 0,
+      "source": "u64/{{.AttachmentCostBudget}}"
+    },
+    {
+      "sym": "constTxIDStateTTLSlots",
+      "description": "number of slots to keep committed non-branch transaction IDs in the state before GC",
+      "numArgs": 0,
+      "source": "u64/{{.TxIDStateTTLSlots}}"
+    },
+    {
+      "sym": "constBranchTxIDStateTTLSlots",
+      "description": "number of slots to keep committed branch transaction IDs in the state before GC (kept far longer than non-branch: LRB / sync / fork-healing read them)",
+      "numArgs": 0,
+      "source": "u64/{{.BranchTxIDStateTTLSlots}}"
+    },
+    {
+      "sym": "constDescription",
+      "description": "arbitrary binary data",
+      "numArgs": 0,
+      "source": "0x{{.DescriptionHex}}"
+    },
+    {
+      "sym": "timeSlotSizeBytes",
+      "description": "constant for the storage deposit constraint",
+      "numArgs": 0,
+      "source": "4"
+    },
+    {
+      "sym": "timestampByteSize",
+      "description": "constant for the storage deposit constraint",
+      "numArgs": 0,
+      "source": "5"
+    },
+    {
+      "sym": "storageDeposit",
+      "description": "Returns the storage deposit for a UTXO with effective size $0. Effective size = utxoBytes + indexValuesTupleBytes + N*33, where N is the number of index-values entries (per-entry trie cost charged on top of the in-UTXO bytes). Computed Go-side in ledger.effectiveStorageSize.\n\nPiecewise-linear schedule (continuous at the kink, size = 100):\n  size <  100 -> deposit = size * 50_000\n  size >= 100 -> deposit = size * 50_000 + (size - 100) * 4 * 50_000\n\nAlgebraically simplified second branch to a single multiplication:\n  size * 50_000 + (size - 100) * 200_000\n    = size * 250_000 - 20_000_000",
+      "numArgs": 1,
+      "source": "if(lessThan($0,u64/100), mul($0,u64/50000), sub(mul($0,u64/250000),u64/20000000))"
+    },
+    {
+      "sym": "constBootstrapChainID",
+      "description": "chain ID of the bootstrap sequencer: fixed 24-byte ASCII value 'Proxima.bootstrap.chain.'",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "0x50726f78696d612e626f6f7473747261702e636861696e2e"
+    },
+    {
+      "sym": "constMineChainID",
+      "description": "chain ID of the fair-launch mine chain: fixed 24-byte ASCII value 'Proxima.fairlaunch.mine!'",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "0x50726f78696d612e666169726c61756e63682e6d696e6521"
+    },
+    {
+      "sym": "constMineAmountBase",
+      "description": "fair-launch: motes minted per mine-chain transit (A) during the flat phase, i.e. up to constMineRampStartSlot",
+      "numArgs": 0,
+      "source": "u64/{{.MineAmountBase}}"
+    },
+    {
+      "sym": "constMineRampStartSlot",
+      "description": "fair-launch: slot at which A stops being flat and starts growing linearly",
+      "numArgs": 0,
+      "source": "u64/{{.MineRampStartSlot}}"
+    },
+    {
+      "sym": "constMineAmountPerSlot",
+      "description": "fair-launch: motes added to A per slot after constMineRampStartSlot",
+      "numArgs": 0,
+      "source": "u64/{{.MineAmountPerSlot}}"
+    },
+    {
+      "sym": "constMineMinPace",
+      "description": "fair-launch: minimum pace P in slots between mine-chain predecessor and successor",
+      "numArgs": 0,
+      "source": "u64/{{.MineMinPace}}"
+    },
+    {
+      "sym": "constMineBaseDifficulty",
+      "description": "fair-launch: seed difficulty B0 (required trailing zero bits) on the genesis mine output. From there B is retargeted per transit within [constMineFloorDifficulty, constMineMaxDifficulty]",
+      "numArgs": 0,
+      "source": "u64/{{.MineBaseDifficulty}}"
+    },
+    {
+      "sym": "constMineFloorDifficulty",
+      "description": "fair-launch: floor difficulty E — the retarget never goes below it",
+      "numArgs": 0,
+      "source": "u64/{{.MineFloorDifficulty}}"
+    },
+    {
+      "sym": "constMineMaxDifficulty",
+      "description": "fair-launch: ceiling difficulty C — the retarget never goes above it. Must stay below 64: the PoW tests only the low 64 bits of the hash, so K >= 64 admits no solution and stalls the chain",
+      "numArgs": 0,
+      "source": "u64/{{.MineMaxDifficulty}}"
+    },
+    {
+      "sym": "constMineHardenAfter",
+      "description": "fair-launch: full slots in a row after which the retarget hardens B by one bit; it eases one bit per empty slot",
+      "numArgs": 0,
+      "source": "u64/{{.MineHardenAfter}}"
+    },
+    {
+      "sym": "constDisableMiningUntilSlot",
+      "description": "fair-launch: the mine chain accepts no transit stamped before this slot",
+      "numArgs": 0,
+      "source": "u64/{{.DisableMiningUntilSlot}}"
+    },
+    {
+      "sym": "constMinerVersion",
+      "description": "fair-launch: the version of the reference miner this ledger expects; a miner built for another version stops and asks for an update",
+      "numArgs": 0,
+      "source": "u64/{{.MinerVersion}}"
+    },
+    {
+      "sym": "constMineRemainingInit",
+      "description": "fair-launch: initial value of the remaining-mintable counter R at genesis (R_init). Total mintable ceiling T = constInitialSupply + R_init",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "u64/{{.MineRemainingInit}}"
+    },
+    {
+      "sym": "constMineTagAlongFee",
+      "description": "fair-launch: the tag-along fee every mine transit pays, in motes; fixed so it cannot buy inclusion or pay a third party",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "u64/{{.MineTagAlongFee}}"
+    },
+    {
+      "sym": "constMineOpeningAmountProx",
+      "description": "fair-launch: reward of the opening payout option, a sigLock output to the signer, in PROX",
+      "numArgs": 0,
+      "source": "u64/{{.MineOpeningAmountProx}}"
+    },
+    {
+      "sym": "constMineDelegationAmountProx",
+      "description": "fair-launch: reward of the new-delegation payout option, in PROX",
+      "numArgs": 0,
+      "source": "u64/{{.MineDelegationAmountProx}}"
+    },
+    {
+      "sym": "constMotesPerProx",
+      "description": "motes in one PROX, the unit of the constants stated in PROX",
+      "numArgs": 0,
+      "immutable": true,
+      "source": "u64/{{.MotesPerProx}}"
+    },
+    {
+      "sym": "coverageContributionUpperBound",
+      "description": "maximum sequencer coverage (tokenBalance + frozenCoverage) to issue a branch transaction at slot $0",
+      "numArgs": 1,
+      "source": "{{if .SetCoverageContributionUpperBound}}evalArg1($0, u64/{{.CoverageContributionUpperBound}}){{else}}div(proformaSupplyUpperBound($0), u64/10){{end}}"
+    },
+    {
+      "sym": "proformaSupplyUpperBound",
+      "description": "supply upper bound at slot $0, assuming constant inflation constants; anchored on constTargetBaseSupply so coverage bounds are stable across the fair-launch mining fill",
+      "numArgs": 1,
+      "source": "add(constTargetBaseSupply, mul($0, add(constSlotInflationBase, constBranchInflationBonusBaseTail)))"
+    },
+    {
+      "sym": "constHealthyCoverageNumerator",
+      "description": "numerator of the healthy-branch coverage fraction (production default 7/12)",
+      "numArgs": 0,
+      "source": "u64/{{.HealthyCoverageNumerator}}"
+    },
+    {
+      "sym": "constHealthyCoverageDenominator",
+      "description": "denominator of the healthy-branch coverage fraction (production default 7/12)",
+      "numArgs": 0,
+      "source": "u64/{{.HealthyCoverageDenominator}}"
+    },
+    {
+      "sym": "healthyCoverageDelta",
+      "description": "returns 1 (true) iff coverageDelta * denominator > supply * numerator (i.e. coverageDelta > (numerator/denominator) * supply). $0 = supply, $1 = coverageDelta",
+      "numArgs": 2,
+      "source": "lessThan(mul($0, constHealthyCoverageNumerator), mul($1, constHealthyCoverageDenominator))"
+    },
+    {
+      "sym": "constEnforceCoverageDeltaMonotonicity",
+      "description": "truthy (0x01) iff the per-milestone coverageDelta enforcement is active: the on-chain within-slot strict-increase rule (_enforceCoverageAdvance) and the attacher's computed-vs-declared cross-check. Production = true; certain attacher tests that build milestones by hand (and cannot declare the attacher-computed coverage) set it false.",
+      "numArgs": 0,
+      "source": "{{if .EnforceCoverageDeltaMonotonicity}}0x01{{else}}0x{{end}}"
+    }
+  ]
+}

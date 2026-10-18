@@ -1,0 +1,2999 @@
+{
+  "format_version": 1,
+  "release": "windows-beta-0.1.0",
+  "source_commit": "60515d0074e63e467de6d63532c1236c1bec332a",
+  "official_release": "v1.0.2-take1",
+  "go_version": "go version go1.26.6 windows/amd64",
+  "trimpath": true,
+  "native_artifacts": {
+    "proxi.exe": {
+      "sha256": "4dbbdfe1b00ac42f62385bc86e1551a06127532770dfe3cf446d0b4d1b00c849",
+      "size_bytes": 56574464,
+      "build_info": "tools/proxi.exe: go1.26.6\n\tpath\tgithub.com/lunfardo314/proxima/proxi\n\tmod\tgithub.com/lunfardo314/proxima\tv1.0.2-take1\t\n\tdep\tcodeberg.org/go-fonts/liberation\tv0.5.0\th1:SsKoMO1v1OZmzkG2DY+7ZkCL9U+rrWI09niOLfQ5Bo0=\n\tdep\tcodeberg.org/go-latex/latex\tv0.2.0\th1:Ol/a6VHY06N+5gPfewswymoRb5ZcKDXWVaVegcx4hbI=\n\tdep\tcodeberg.org/go-pdf/fpdf\tv0.11.1\th1:U8+coOTDVLxHIXZgGvkfQEi/q0hYHYvEHFuGNX2GzGs=\n\tdep\tfilippo.io/bigmod\tv0.1.1-0.20260103110540-f8a47775ebe5\th1:JA0fFr+kxpqTdxR9LOBiTWpGNchqmkcsgmdeJZRclZ0=\n\tdep\tfilippo.io/edwards25519\tv1.2.0\th1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=\n\tdep\tfilippo.io/keygen\tv1.0.0\th1:u0/Fhxlgz3uPv+XxhfgTq3BJt5VesIPM5ue/OuG7qjQ=\n\tdep\tgit.sr.ht/~sbinet/gg\tv0.7.0\th1:YmNf7YKd7diDMTPm86hZa1EM3pbkOyD/zzjl0LZUdNM=\n\tdep\tgithub.com/ajstarks/svgo\tv0.0.0-20211024235047-1546f124cd8b\th1:slYM766cy2nI3BwyRiyQj/Ud48djTMtMebDqepE95rw=\n\tdep\tgithub.com/benbjohnson/clock\tv1.3.5\th1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz5o=\n\tdep\tgithub.com/beorn7/perks\tv1.0.1\th1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=\n\tdep\tgithub.com/cespare/xxhash/v2\tv2.3.0\th1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=\n\tdep\tgithub.com/davecgh/go-spew\tv1.1.2-0.20180830191138-d8f796af33cc\th1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=\n\tdep\tgithub.com/davidlazar/go-crypto\tv0.0.0-20200604182044-b73af7476f6c\th1:pFUpOrbxDR6AkioZ1ySsx5yxlDQZ8stG2b88gTPxgJU=\n\tdep\tgithub.com/decred/dcrd/dcrec/secp256k1/v4\tv4.4.1\th1:5RVFMOWjMyRy8cARdy79nAmgYw3hK/4HUq48LQ6Wwqo=\n\tdep\tgithub.com/dgraph-io/badger/v4\tv4.9.4\th1:bcw+waCpzRZ2nmcSPbnPvDVhiEsn98TKmvnAhK7r7LM=\n\tdep\tgithub.com/dgraph-io/ristretto/v2\tv2.4.2\th1:x0cvjmUKxt764Yxdk2nr94we1AvPPAMh1rh5TQ+Jo80=\n\tdep\tgithub.com/dunglas/httpsfv\tv1.1.0\th1:Jw76nAyKWKZKFrpMMcL76y35tOpYHqQPzHQiwDvpe54=\n\tdep\tgithub.com/dustin/go-humanize\tv1.0.1\th1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=\n\tdep\tgithub.com/filecoin-project/go-clock\tv0.1.0\th1:SFbYIM75M8NnFm1yMHhN9Ahy3W5bEZV9gd6MPfXbKVU=\n\tdep\tgithub.com/flynn/noise\tv1.1.0\th1:KjPQoQCEFdZDiP03phOvGi11+SVVhBG2wOWAorLsstg=\n\tdep\tgithub.com/fsnotify/fsnotify\tv1.10.1\th1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx59Ho=\n\tdep\tgithub.com/gammazero/deque\tv1.2.1\th1:9fnQVFCCZ9/NOc7ccTNqzoKd1tCWOqeI05/lPqFPMGQ=\n\tdep\tgithub.com/go-logr/logr\tv1.4.3\th1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=\n\tdep\tgithub.com/go-logr/stdr\tv1.2.2\th1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=\n\tdep\tgithub.com/go-viper/mapstructure/v2\tv2.5.0\th1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=\n\tdep\tgithub.com/golang/freetype\tv0.0.0-20170609003504-e2365dfdc4a0\th1:DACJavvAHhabrF08vX0COfcOBJRhZ8lUbR+ZWIs0Y5g=\n\tdep\tgithub.com/google/flatbuffers\tv25.12.19+incompatible\th1:haMV2JRRJCe1998HeW/p0X9UaMTK6SDo0ffLn2+DbLs=\n\tdep\tgithub.com/google/gopacket\tv1.1.19\th1:ves8RnFZPGiFnTS0uPQStjwru6uO6h+nlr9j6fL7kF8=\n\tdep\tgithub.com/google/uuid\tv1.6.0\th1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\n\tdep\tgithub.com/gorilla/websocket\tv1.5.3\th1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=\n\tdep\tgithub.com/hashicorp/golang-lru\tv1.0.2\th1:dV3g9Z/unq5DpblPpw+Oqcv4dU/1omnb4Ok8iPY6p1c=\n\tdep\tgithub.com/huin/goupnp\tv1.3.0\th1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=\n\tdep\tgithub.com/inconshreveable/mousetrap\tv1.1.0\th1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=\n\tdep\tgithub.com/ipfs/boxo\tv0.41.0\th1:diKlFosOG2e1mgSO1CXqcMSnHvtn6ubUvaCf9iF8AIY=\n\tdep\tgithub.com/ipfs/go-cid\tv0.6.2\th1:VuGwJd+KJTaMJ4S4d5EEf9SXc17YUblS5axCbocn9YE=\n\tdep\tgithub.com/ipfs/go-datastore\tv0.9.2\th1:HJOgAmvWPRMHiwD8JHBzGZQNTKhuFGYfp8bNPwye28g=\n\tdep\tgithub.com/ipfs/go-log/v2\tv2.9.2\th1:O/5BB0elpkRILvT24rCJ5976wWd7u0nJ436T3rdYdc4=\n\tdep\tgithub.com/ipld/go-ipld-prime\tv0.24.0\th1:6th8Z6Peh5bCWuRAVZcDO1sHzZdVF6F2cCCDG3681tg=\n\tdep\tgithub.com/jackpal/go-nat-pmp\tv1.0.2\th1:KzKSgb7qkJvOUTqYl9/Hg/me3pWgBmERKrTGD7BdWus=\n\tdep\tgithub.com/jbenet/go-temp-err-catcher\tv0.1.0\th1:zpb3ZH6wIE8Shj2sKS+khgRvf7T7RABoLk/+KKHggpk=\n\tdep\tgithub.com/klauspost/compress\tv1.19.0\th1:sXLILfc9jV2QYWkzFOPWStmcUVH2RHEB1JCdY2oVvCQ=\n\tdep\tgithub.com/klauspost/cpuid/v2\tv2.4.0\th1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=\n\tdep\tgithub.com/koron/go-ssdp\tv0.9.1\th1:zvxbAAuJftJIZ8Jh8mda+LI7V92hYZf/sKprmOxpxwA=\n\tdep\tgithub.com/libp2p/go-buffer-pool\tv0.1.0\th1:oK4mSFcQz7cTQIfqbe4MIj9gLW+mnanjyFtc6cdF0Y8=\n\tdep\tgithub.com/libp2p/go-cidranger\tv1.1.0\th1:ewPN8EZ0dd1LSnrtuwd4709PXVcITVeuwbag38yPW7c=\n\tdep\tgithub.com/libp2p/go-flow-metrics\tv0.3.0\th1:q31zcHUvHnwDO0SHaukewPYgwOBSxtt830uJtUx6784=\n\tdep\tgithub.com/libp2p/go-libp2p\tv0.48.0\th1:h2BrLAgrj7X8bEN05K7qmrjpNHYA+6tnsGRdprjTnvo=\n\tdep\tgithub.com/libp2p/go-libp2p-asn-util\tv0.4.1\th1:xqL7++IKD9TBFMgnLPZR6/6iYhawHKHl950SO9L6n94=\n\tdep\tgithub.com/libp2p/go-libp2p-kad-dht\tv0.41.0\th1:sDigz5SgV20Crj8ItJmJpEAM+eJrzC/SaiBweg0gDRw=\n\tdep\tgithub.com/libp2p/go-libp2p-kbucket\tv0.9.0\th1:9kTf74R8CHGIk3QK+gwEOnJ/t+JzuxqQSfAAASl1VhM=\n\tdep\tgithub.com/libp2p/go-libp2p-record\tv0.3.1\th1:cly48Xi5GjNw5Wq+7gmjfBiG9HCzQVkiZOUZ8kUl+Fg=\n\tdep\tgithub.com/libp2p/go-libp2p-routing-helpers\tv0.7.5\th1:HdwZj9NKovMx0vqq6YNPTh6aaNzey5zHD7HeLJtq6fI=\n\tdep\tgithub.com/libp2p/go-msgio\tv0.3.0\th1:mf3Z8B1xcFN314sWX+2vOTShIE0Mmn2TXn3YCUQGNj0=\n\tdep\tgithub.com/libp2p/go-netroute\tv0.4.0\th1:sZZx9hyANYUx9PZyqcgE/E1GUG3iEtTZHUEvdtXT7/Q=\n\tdep\tgithub.com/libp2p/go-reuseport\tv0.4.0\th1:nR5KU7hD0WxXCJbmw7r2rhRYruNRl2koHw8fQscQm2s=\n\tdep\tgithub.com/libp2p/go-yamux/v5\tv5.1.0\th1:8Qlxj4E9JGJAQVW6+uj2o7mqkqsIVlSUGmTWhlXzoHE=\n\tdep\tgithub.com/lunfardo314/easyfl\tv0.0.0-20261012131332-8e4d838e7b0b\th1:mZeTXlcDSkf/88mKc2Pi3klJDqy6c5qkshY3IxR/zrk=\n\tdep\tgithub.com/lunfardo314/unitrie\tv0.0.0-20260906143222-28d8bd0df646\th1:1ul1ZlWxPg8W/gwej6GWd0tetFEnoEvtiArBPTTHdfA=\n\tdep\tgithub.com/mattn/go-isatty\tv0.0.23\th1:cYwCQTQf3HB6xUC+BtyCLZNr7IzbOmoZbmssVNzSyiQ=\n\tdep\tgithub.com/minio/sha256-simd\tv1.0.1\th1:6kaan5IFmwTNynnKKpDHe6FWHohJOHhCPchzK49dzMM=\n\tdep\tgithub.com/mr-tron/base58\tv1.3.0\th1:K6Y13R2h+dku0wOqKtecgRnBUBPrZzLZy5aIj8lCcJI=\n\tdep\tgithub.com/multiformats/go-base32\tv0.1.0\th1:pVx9xoSPqEIQG8o+UbAe7DNi51oej1NtK+aGkbLYxPE=\n\tdep\tgithub.com/multiformats/go-base36\tv0.2.0\th1:lFsAbNOGeKtuKozrtBsAkSVhv1p9D0/qedU9rQyccr0=\n\tdep\tgithub.com/multiformats/go-multiaddr\tv0.16.1\th1:fgJ0Pitow+wWXzN9do+1b8Pyjmo8m5WhGfzpL82MpCw=\n\tdep\tgithub.com/multiformats/go-multiaddr-dns\tv0.6.0\th1:yKIW08WJHSPJ8bDAT2O/5fypCaUu9Bjl8r/1eJ4XAW8=\n\tdep\tgithub.com/multiformats/go-multiaddr-fmt\tv0.1.0\th1:WLEFClPycPkp4fnIzoFoV9FVd49/eQsuaL3/CWe167E=\n\tdep\tgithub.com/multiformats/go-multibase\tv0.3.0\th1:8helZD2+4Db7NNWFiktk2NePbF0boolBe6bDQvM4r68=\n\tdep\tgithub.com/multiformats/go-multicodec\tv0.10.0\th1:UpP223cig/Cx8J76jWt91njpK3GTAO1w02sdcjZDSuc=\n\tdep\tgithub.com/multiformats/go-multihash\tv0.2.3\th1:7Lyc8XfX/IY2jWb/gI7JP+o7JEq9hOa7BFvVU9RSh+U=\n\tdep\tgithub.com/multiformats/go-multistream\tv0.6.1\th1:4aoX5v6T+yWmc2raBHsTvzmFhOI8WVOer28DeBBEYdQ=\n\tdep\tgithub.com/multiformats/go-varint\tv0.1.0\th1:i2wqFp4sdl3IcIxfAonHQV9qU5OsZ4Ts9IOoETFs5dI=\n\tdep\tgithub.com/munnerz/goautoneg\tv0.0.0-20191010083416-a7dc8b61c822\th1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=\n\tdep\tgithub.com/pbnjay/memory\tv0.0.0-20210728143218-7b4eea64cf58\th1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=\n\tdep\tgithub.com/pelletier/go-toml/v2\tv2.4.3\th1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=\n\tdep\tgithub.com/pion/datachannel\tv1.6.2\th1:7EXQ8TH3vTouBUdRWYbcX2edSx9Yj6k5zl5P+qyxEPc=\n\tdep\tgithub.com/pion/dtls/v3\tv3.1.5\th1:9xJtVsHwMYeSjPp5Hh1FTis4DchnQWtnOa5o+6ygqfc=\n\tdep\tgithub.com/pion/ice/v4\tv4.3.0\th1:X8l4s9zV2HeTKX33nulWAFXAEo5KhIVzOsY62/3t/LM=\n\tdep\tgithub.com/pion/interceptor\tv0.1.45\th1:6PUo/5829bIfRFIPPJQzuDn8EjxRTSB/CSD7QVCOaqo=\n\tdep\tgithub.com/pion/logging\tv0.2.4\th1:tTew+7cmQ+Mc1pTBLKH2puKsOvhm32dROumOZ655zB8=\n\tdep\tgithub.com/pion/mdns/v2\tv2.1.0\th1:3IJ9+Xio6tWYjhN6WwuY142P/1jA0D5ERaIqawg/fOY=\n\tdep\tgithub.com/pion/randutil\tv0.1.0\th1:CFG1UdESneORglEsnimhUjf33Rwjubwj6xfiOXBa3mA=\n\tdep\tgithub.com/pion/rtcp\tv1.2.17\th1:PxiT6L79yPZKtXIsXdG1eakBl6dtBj4x+4oVEL0DlSw=\n\tdep\tgithub.com/pion/rtp\tv1.10.3\th1:r5nJQdtM9Dc4ZYxtTcPPz7PIFArKJIf/DMlIUxU7+1c=\n\tdep\tgithub.com/pion/sctp\tv1.11.0\th1:sAxv9Qp3uIcaF5wu1XntwshtnW93CEuxhpkYzSbnfMs=\n\tdep\tgithub.com/pion/sdp/v3\tv3.0.19\th1:1VMKs3gIkTQV5M3hNKfTAPrDXSNrYtOlmOD8+mSZUGQ=\n\tdep\tgithub.com/pion/srtp/v3\tv3.0.12\th1:U7V17bckl7sI4mb3sepiojByDuBY0wNCqQE+6IlQBbc=\n\tdep\tgithub.com/pion/stun/v3\tv3.1.6\th1:WnhsD0eHCiwCfKNkVx0VJJwr2Y3eV4Ueih3KJ+dfZy8=\n\tdep\tgithub.com/pion/transport/v4\tv4.0.2\th1:ifYlPqNwsy6aKQ9y8yzxXlHae5431ZrH2avkD/Rn6Tk=\n\tdep\tgithub.com/pion/turn/v5\tv5.0.12\th1:6+b69ivQQXSlyfkp2AKripqD2k3W32qXK8QzCzpJWPI=\n\tdep\tgithub.com/pion/webrtc/v4\tv4.2.16\th1:oK1GAg0TWJtZWYB8J/BgTgGWPoV2148gQWocH12vr3Q=\n\tdep\tgithub.com/pmezard/go-difflib\tv1.0.1-0.20181226105442-5d4384ee4fb2\th1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=\n\tdep\tgithub.com/polydawn/refmt\tv0.90.0\th1:58BfEsP+G4uIRD9ApJTFsag+Mw+QQlZuH9uI/lPmjfY=\n\tdep\tgithub.com/prometheus/client_golang\tv1.23.2\th1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=\n\tdep\tgithub.com/prometheus/client_model\tv0.6.2\th1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=\n\tdep\tgithub.com/prometheus/common\tv0.70.0\th1:bcpru3tWPVnxGnETLgOV5jbp/JRXgYEyv65CuBLAMMI=\n\tdep\tgithub.com/quic-go/qpack\tv0.6.0\th1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=\n\tdep\tgithub.com/quic-go/quic-go\tv0.60.0\th1:xcQioE8OM66UQLeUMHltK1CCcOu3JbVB4JAQdDQSB+0=\n\tdep\tgithub.com/quic-go/webtransport-go\tv0.11.1\th1:rrFQMO+7/52ZDJ04fsrjIaWqn6q1z1MYo9iVFq6JtbA=\n\tdep\tgithub.com/sagikazarmark/locafero\tv0.12.0\th1:/NQhBAkUb4+fH1jivKHWusDYFjMOOKU88eegjfxfHb4=\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tdep\tgithub.com/spf13/afero\tv1.15.0\th1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=\n\tdep\tgithub.com/spf13/cast\tv1.10.0\th1:h2x0u2shc1QuLHfxi+cTJvs30+ZAHOGRic8uyGTDWxY=\n\tdep\tgithub.com/spf13/cobra\tv1.10.2\th1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=\n\tdep\tgithub.com/spf13/pflag\tv1.0.10\th1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=\n\tdep\tgithub.com/spf13/viper\tv1.21.0\th1:x5S+0EU27Lbphp4UKm1C+1oQO+rKx36vfCoaVebLFSU=\n\tdep\tgithub.com/stretchr/testify\tv1.11.1\th1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=\n\tdep\tgithub.com/subosito/gotenv\tv1.6.0\th1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=\n\tdep\tgithub.com/whyrusleeping/go-keyspace\tv0.0.0-20160322163242-5b898ac5add1\th1:EKhdznlJHPMoKr0XTrX+IlJs1LH3lyx2nfr1dOlZ79k=\n\tdep\tgithub.com/whyrusleeping/multiaddr-filter\tv0.0.0-20160516205228-e903e4adabd7\th1:E9S12nwJwEOXe2d6gT6qxdvqMnNq+VnSsKPgm2ZZNds=\n\tdep\tgithub.com/wlynxg/anet\tv0.0.5\th1:J3VJGi1gvo0JwZ/P1/Yc/8p63SoW98B5dHkYDmpgvvU=\n\tdep\tgo.opentelemetry.io/auto/sdk\tv1.2.1\th1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=\n\tdep\tgo.opentelemetry.io/otel\tv1.44.0\th1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=\n\tdep\tgo.opentelemetry.io/otel/metric\tv1.44.0\th1:1w0gILTcHdr3YI+ixLyjemwrVnsMURbTZFrSYCdDdmc=\n\tdep\tgo.opentelemetry.io/otel/trace\tv1.44.0\th1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=\n\tdep\tgo.uber.org/dig\tv1.19.0\th1:BACLhebsYdpQ7IROQ1AGPjrXcP5dF80U3gKoFzbaq/4=\n\tdep\tgo.uber.org/fx\tv1.24.0\th1:wE8mruvpg2kiiL1Vqd0CC+tr0/24XIB10Iwp2lLWzkg=\n\tdep\tgo.uber.org/multierr\tv1.11.0\th1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=\n\tdep\tgo.uber.org/zap\tv1.28.0\th1:IZzaP1Fv73/T/pBMLk4VutPl36uNC+OSUh3JLG3FIjo=\n\tdep\tgo.yaml.in/yaml/v3\tv3.0.4\th1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=\n\tdep\tgolang.org/x/crypto\tv0.56.0\th1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=\n\tdep\tgolang.org/x/exp\tv0.0.0-20260709172345-9ea1abe57597\th1:qLvzZeaANDgyVOA8pyHCOStGlXn0rseXma+GQjeuv2g=\n\tdep\tgolang.org/x/image\tv0.45.0\th1:FMb1nTbH5H9vF55SriQHgFw5GnNL9Jg6L25BwXKzhB0=\n\tdep\tgolang.org/x/net\tv0.57.0\th1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=\n\tdep\tgolang.org/x/sync\tv0.22.0\th1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=\n\tdep\tgolang.org/x/sys\tv0.47.0\th1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=\n\tdep\tgolang.org/x/term\tv0.45.0\th1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=\n\tdep\tgolang.org/x/text\tv0.41.0\th1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=\n\tdep\tgolang.org/x/time\tv0.15.0\th1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=\n\tdep\tgolang.org/x/xerrors\tv0.0.0-20240903120638-7835f813f4da\th1:noIWHXmPHxILtqtCOPIhSt0ABwskkZKjD3bXGnZGpNY=\n\tdep\tgonum.org/v1/gonum\tv0.17.0\th1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=\n\tdep\tgonum.org/v1/plot\tv0.17.0\th1:d0DwPVBe9jnEGqQBoZGl/P2M9WciJbG2CnV59C9QBT4=\n\tdep\tgoogle.golang.org/protobuf\tv1.36.11\th1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=\n\tdep\tgopkg.in/yaml.v2\tv2.4.0\th1:D8xgwECY7CYvx+Y2n4sBz93Jn9JRvxdiyyo8CTfuKaY=\n\tdep\tgopkg.in/yaml.v3\tv3.0.1\th1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=\n\tdep\tlukechampine.com/blake3\tv1.4.1\th1:I3Smz7gso8w4/TunLKec6K2fn+kyKtDxr/xcQEN84Wg=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=windows\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=60515d0074e63e467de6d63532c1236c1bec332a\n\tbuild\tvcs.time=2026-10-18T14:04:58Z\n\tbuild\tvcs.modified=false\n"
+    },
+    "oracle.exe": {
+      "sha256": "6f45f9b9ed44bfa9269d88b6d76d6f6c1aae0f50959b9e2e31ba6404c4386a85",
+      "size_bytes": 3916800,
+      "build_info": "tools/oracle.exe: go1.26.6\n\tpath\tcommand-line-arguments\n\tdep\tfilippo.io/edwards25519\tv1.2.0\th1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=\n\tdep\tgithub.com/lunfardo314/proxima\t(devel)\t\n\tdep\tgolang.org/x/crypto\tv0.56.0\th1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=\n\tdep\tgolang.org/x/sys\tv0.47.0\th1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=windows\n\tbuild\tGOAMD64=v1\n"
+    },
+    "gpu-seeker.exe": {
+      "sha256": "567b036342c6c65b492755c6bf693f3e2cf8f75560e20ae565120a2c05f2257d",
+      "size_bytes": 2728448,
+      "build_info": "tools/gpu-seeker.exe: go1.26.6\n\tpath\tcommand-line-arguments\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=windows\n\tbuild\tGOAMD64=v1\n"
+    }
+  },
+  "components": [
+    {
+      "component": "Go-LICENSE.txt",
+      "file": "licenses/Go-LICENSE.txt",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "component": "Go-PATENTS.txt",
+      "file": "licenses/Go-PATENTS.txt",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "component": "Proxima-LICENSE.txt",
+      "file": "licenses/Proxima-LICENSE.txt",
+      "sha256": "31cadcffbd336b670720f1b39404ef555c6f842abb6f036bbb5e482d50a9f8bf"
+    },
+    {
+      "component": "Miner-LICENSE.txt",
+      "file": "licenses/Miner-LICENSE.txt",
+      "sha256": "5d91b25c29ea3091c0aeb13beb4b3a28701fdd8af92312a501850869456c855a"
+    },
+    {
+      "component": "Python-LICENSE.txt",
+      "file": "licenses/Python-LICENSE.txt",
+      "sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/crypto/internal/boring/LICENSE",
+      "sha256": "56210f826b8f0fbac3160dfe55c97f4019eb6cdda3963b5a0eab8a8bdb62360e"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/crypto/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/crypto/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/net/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/net/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/sys/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/sys/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/text/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "component": "Go runtime package notice",
+      "file": "licenses/go-runtime/src/vendor/golang.org/x/text/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    }
+  ],
+  "linked_go_modules": [
+    {
+      "module": "codeberg.org/go-fonts/liberation",
+      "version": "v0.5.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "codeberg.org/go-fonts/liberation/liberationmonobold",
+        "codeberg.org/go-fonts/liberation/liberationmonobolditalic",
+        "codeberg.org/go-fonts/liberation/liberationmonoitalic",
+        "codeberg.org/go-fonts/liberation/liberationmonoregular",
+        "codeberg.org/go-fonts/liberation/liberationsansbold",
+        "codeberg.org/go-fonts/liberation/liberationsansbolditalic",
+        "codeberg.org/go-fonts/liberation/liberationsansitalic",
+        "codeberg.org/go-fonts/liberation/liberationsansregular",
+        "codeberg.org/go-fonts/liberation/liberationserifbold",
+        "codeberg.org/go-fonts/liberation/liberationserifbolditalic",
+        "codeberg.org/go-fonts/liberation/liberationserifitalic",
+        "codeberg.org/go-fonts/liberation/liberationserifregular"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/codeberg.org_go-fonts_liberation_v0.5.0/LICENSE",
+          "sha256": "33443b584ce7956dbc4adc120502e4095b0caf24e8c8cd36935fb2e81ac00779"
+        },
+        {
+          "file": "licenses/modules/codeberg.org_go-fonts_liberation_v0.5.0/LICENSE-SIL",
+          "sha256": "f45cc618951fffe1470140692086f7ca8a46ba81fe147cf8416bd63fb4849c61"
+        }
+      ]
+    },
+    {
+      "module": "codeberg.org/go-latex/latex",
+      "version": "v0.2.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "codeberg.org/go-latex/latex",
+        "codeberg.org/go-latex/latex/ast",
+        "codeberg.org/go-latex/latex/drawtex",
+        "codeberg.org/go-latex/latex/font",
+        "codeberg.org/go-latex/latex/font/ttf",
+        "codeberg.org/go-latex/latex/internal/tex2unicode",
+        "codeberg.org/go-latex/latex/mtex",
+        "codeberg.org/go-latex/latex/mtex/symbols",
+        "codeberg.org/go-latex/latex/tex",
+        "codeberg.org/go-latex/latex/token"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/codeberg.org_go-latex_latex_v0.2.0/LICENSE",
+          "sha256": "08270e7773daa4f6e4b05c2f6acf7973afea615bd5a65d0b84ad9f4ff5e02d82"
+        }
+      ]
+    },
+    {
+      "module": "codeberg.org/go-pdf/fpdf",
+      "version": "v0.11.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "codeberg.org/go-pdf/fpdf"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/codeberg.org_go-pdf_fpdf_v0.11.1/LICENSE",
+          "sha256": "886dff73f14c6beea6936796184c1517c3c4a6986b97d26904e5dac028c494dc"
+        }
+      ]
+    },
+    {
+      "module": "filippo.io/bigmod",
+      "version": "v0.1.1-0.20260103110540-f8a47775ebe5",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "filippo.io/bigmod"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/filippo.io_bigmod_v0.1.1-0.20260103110540-f8a47775ebe5/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        }
+      ]
+    },
+    {
+      "module": "filippo.io/edwards25519",
+      "version": "v1.2.0",
+      "used_by": [
+        "proxi.exe",
+        "oracle.exe"
+      ],
+      "packages": [
+        "filippo.io/edwards25519",
+        "filippo.io/edwards25519/field"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/filippo.io_edwards25519_v1.2.0/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        }
+      ]
+    },
+    {
+      "module": "filippo.io/keygen",
+      "version": "v1.0.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "filippo.io/keygen"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/filippo.io_keygen_v1.0.0/LICENSE",
+          "sha256": "7be46d0cbadf3425a7938f68586bf928da7884c937bddbbc12000854df6af87a"
+        }
+      ]
+    },
+    {
+      "module": "git.sr.ht/~sbinet/gg",
+      "version": "v0.7.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "git.sr.ht/~sbinet/gg"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/git.sr.ht__sbinet_gg_v0.7.0/LICENSE.md",
+          "sha256": "9df54f1491f6110e0a667f17d5c7105f9246a602ca5fd44c673c1db74ccfc823"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ajstarks/svgo",
+      "version": "v0.0.0-20211024235047-1546f124cd8b",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ajstarks/svgo"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ajstarks_svgo_v0.0.0-20211024235047-1546f124cd8b/LICENSE",
+          "sha256": "ed4b89feec98e1fb387e439551a914672fb689c726d1e22e3500decc036a7cae"
+        },
+        {
+          "file": "licenses/modules/github.com_ajstarks_svgo_v0.0.0-20211024235047-1546f124cd8b/LICENSE-link.txt",
+          "sha256": "faef26bb83b741b22eed4593980048f1607bdc679232ca9635ccf505cf2abe77"
+        }
+      ]
+    },
+    {
+      "module": "github.com/benbjohnson/clock",
+      "version": "v1.3.5",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/benbjohnson/clock"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_benbjohnson_clock_v1.3.5/LICENSE",
+          "sha256": "4a45268602cb0bb14943ff51689dbd1e4c87acd13b9cd3842a7e3de4c4b27f03"
+        }
+      ]
+    },
+    {
+      "module": "github.com/beorn7/perks",
+      "version": "v1.0.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/beorn7/perks/quantile"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_beorn7_perks_v1.0.1/LICENSE",
+          "sha256": "0db7c9ebb3717e526f34f87dd1ee8bc77d36846e29cb0cec9246f7138fbe962b"
+        }
+      ]
+    },
+    {
+      "module": "github.com/cespare/xxhash/v2",
+      "version": "v2.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/cespare/xxhash/v2"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_cespare_xxhash_v2_v2.3.0/LICENSE.txt",
+          "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c"
+        }
+      ]
+    },
+    {
+      "module": "github.com/davecgh/go-spew",
+      "version": "v1.1.2-0.20180830191138-d8f796af33cc",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/davecgh/go-spew/spew"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_davecgh_go-spew_v1.1.2-0.20180830191138-d8f796af33cc/LICENSE",
+          "sha256": "1b93a317849ee09d3d7e4f1d20c2b78ddb230b4becb12d7c224c927b9d470251"
+        }
+      ]
+    },
+    {
+      "module": "github.com/davidlazar/go-crypto",
+      "version": "v0.0.0-20200604182044-b73af7476f6c",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/davidlazar/go-crypto/salsa20"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_davidlazar_go-crypto_v0.0.0-20200604182044-b73af7476f6c/LICENSE",
+          "sha256": "671c220b1fc1218b3dc928bcb8d366a4c10e5d04f4dd5cf97c7cbbb225aaa05d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/decred/dcrd/dcrec/secp256k1/v4",
+      "version": "v4.4.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/decred/dcrd/dcrec/secp256k1/v4",
+        "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_decred_dcrd_dcrec_secp256k1_v4_v4.4.1/LICENSE",
+          "sha256": "480be5fb1be03ff19fd71d863f453f16262e98d4e568f5bccfcb7aa3ccf8cf0d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/dgraph-io/badger/v4",
+      "version": "v4.9.4",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/dgraph-io/badger/v4",
+        "github.com/dgraph-io/badger/v4/fb",
+        "github.com/dgraph-io/badger/v4/options",
+        "github.com/dgraph-io/badger/v4/pb",
+        "github.com/dgraph-io/badger/v4/skl",
+        "github.com/dgraph-io/badger/v4/table",
+        "github.com/dgraph-io/badger/v4/trie",
+        "github.com/dgraph-io/badger/v4/y"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_dgraph-io_badger_v4_v4.9.4/LICENSE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        }
+      ]
+    },
+    {
+      "module": "github.com/dgraph-io/ristretto/v2",
+      "version": "v2.4.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/dgraph-io/ristretto/v2",
+        "github.com/dgraph-io/ristretto/v2/z",
+        "github.com/dgraph-io/ristretto/v2/z/simd"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_dgraph-io_ristretto_v2_v2.4.2/LICENSE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "file": "licenses/modules/github.com_dgraph-io_ristretto_v2_v2.4.2/z/LICENSE",
+          "sha256": "8444f00636d263befe4ea82fd5533df0f86347626b6ede2c07089534d96894a0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/dunglas/httpsfv",
+      "version": "v1.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/dunglas/httpsfv"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_dunglas_httpsfv_v1.1.0/LICENSE",
+          "sha256": "2a5341732bde88aeb3b066492df6e15bf10d082761f9e3a251236ce80419d6ba"
+        }
+      ]
+    },
+    {
+      "module": "github.com/dustin/go-humanize",
+      "version": "v1.0.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/dustin/go-humanize"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_dustin_go-humanize_v1.0.1/LICENSE",
+          "sha256": "a973b4498c13eb74baa2a8e5c351426a6826f2fcdd909916dbe53ee2e755fd71"
+        }
+      ]
+    },
+    {
+      "module": "github.com/filecoin-project/go-clock",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/filecoin-project/go-clock"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_filecoin-project_go-clock_v0.1.0/LICENSE",
+          "sha256": "4a45268602cb0bb14943ff51689dbd1e4c87acd13b9cd3842a7e3de4c4b27f03"
+        }
+      ]
+    },
+    {
+      "module": "github.com/flynn/noise",
+      "version": "v1.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/flynn/noise"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_flynn_noise_v1.1.0/LICENSE",
+          "sha256": "42d4cb1b0c67fe32f716fca52b3d7148406b09c8024e3844ac0595707557da49"
+        }
+      ]
+    },
+    {
+      "module": "github.com/fsnotify/fsnotify",
+      "version": "v1.10.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/fsnotify/fsnotify",
+        "github.com/fsnotify/fsnotify/internal"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_fsnotify_fsnotify_v1.10.1/LICENSE",
+          "sha256": "2dfbe6d2b5eb18b55148f3805d88648a09e0d17e38428123259afb08c8996e37"
+        }
+      ]
+    },
+    {
+      "module": "github.com/gammazero/deque",
+      "version": "v1.2.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/gammazero/deque"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_gammazero_deque_v1.2.1/LICENSE",
+          "sha256": "33b7614d6cb1f09eb73b72656228375212267f74ea4719768dc8aef5aad288a7"
+        }
+      ]
+    },
+    {
+      "module": "github.com/go-logr/logr",
+      "version": "v1.4.3",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/go-logr/logr",
+        "github.com/go-logr/logr/funcr"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_go-logr_logr_v1.4.3/LICENSE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+        }
+      ]
+    },
+    {
+      "module": "github.com/go-logr/stdr",
+      "version": "v1.2.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/go-logr/stdr"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_go-logr_stdr_v1.2.2/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "module": "github.com/go-viper/mapstructure/v2",
+      "version": "v2.5.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/go-viper/mapstructure/v2",
+        "github.com/go-viper/mapstructure/v2/internal/errors"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_go-viper_mapstructure_v2_v2.5.0/LICENSE",
+          "sha256": "22adc4abdece712a737573672f082fd61ac2b21df878efb87ffcff4354a07f26"
+        }
+      ]
+    },
+    {
+      "module": "github.com/golang/freetype",
+      "version": "v0.0.0-20170609003504-e2365dfdc4a0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/golang/freetype/raster"
+      ],
+      "license_selected": "FTL (dual-license option selected; not GPL)",
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSE",
+          "sha256": "d3ba056adc2b7909e95681deaae397fb37c97ed491a920f491214f07b62c41d0"
+        },
+        {
+          "file": "licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSES/ftl.txt",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "file": "licenses/modules/github.com_golang_freetype_v0.0.0-20170609003504-e2365dfdc4a0/LICENSES/gpl.txt",
+          "sha256": "c4120c6752c910c299e3bd9cb3a46ff262c268303ca2069b61f92f10a5656c18"
+        }
+      ]
+    },
+    {
+      "module": "github.com/google/flatbuffers",
+      "version": "v25.12.19+incompatible",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/google/flatbuffers/go"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_google_flatbuffers_v25.12.19_incompatible/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "module": "github.com/google/gopacket",
+      "version": "v1.1.19",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/google/gopacket/routing"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_google_gopacket_v1.1.19/LICENSE",
+          "sha256": "8025b28cd71e0a486b173d4a29a05478c003d197a907f99b61a05e181e90b92d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/google/uuid"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_google_uuid_v1.6.0/LICENSE",
+          "sha256": "0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/gorilla/websocket",
+      "version": "v1.5.3",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/gorilla/websocket"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_gorilla_websocket_v1.5.3/LICENSE",
+          "sha256": "2be1b548b0387ca8948e1bb9434e709126904d15f622cc2d0d8e7f186e4d122d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/hashicorp/golang-lru",
+      "version": "v1.0.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/hashicorp/golang-lru/simplelru"
+      ],
+      "source_included": "licenses/source/github.com_hashicorp_golang-lru_v1.0.2",
+      "license_selected": "MPL-2.0",
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_hashicorp_golang-lru_v1.0.2/LICENSE",
+          "sha256": "6c7088eb877b5d7e6e0e9d27e822ea25fcda2e83f9eba59bb5f1418a656796e0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/huin/goupnp",
+      "version": "v1.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/huin/goupnp",
+        "github.com/huin/goupnp/dcps/internetgateway1",
+        "github.com/huin/goupnp/dcps/internetgateway2",
+        "github.com/huin/goupnp/httpu",
+        "github.com/huin/goupnp/scpd",
+        "github.com/huin/goupnp/soap",
+        "github.com/huin/goupnp/ssdp"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_huin_goupnp_v1.3.0/LICENSE",
+          "sha256": "440688406aeb546bad566031c8a01531a01a683166f7010380fcc0f68d830311"
+        }
+      ]
+    },
+    {
+      "module": "github.com/inconshreveable/mousetrap",
+      "version": "v1.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/inconshreveable/mousetrap"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_inconshreveable_mousetrap_v1.1.0/LICENSE",
+          "sha256": "4819582701f150b28a563a6cd8ed0bf5a754e3c67b90ad38d78ba4131bf77795"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ipfs/boxo",
+      "version": "v0.41.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ipfs/boxo/ipns",
+        "github.com/ipfs/boxo/ipns/pb",
+        "github.com/ipfs/boxo/path",
+        "github.com/ipfs/boxo/util"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ipfs_boxo_v0.41.0/LICENSE.md",
+          "sha256": "05ec74e1c6db7faeebc46b7f2cfe0ee3a612d8e502d87cb71f517fc52b770448"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ipfs/go-cid",
+      "version": "v0.6.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ipfs/go-cid"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ipfs_go-cid_v0.6.2/LICENSE",
+          "sha256": "870903a5afd2ec2b73c49ba35fe9d26946564994ee2a02fcc17eba7240e99648"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ipfs/go-datastore",
+      "version": "v0.9.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ipfs/go-datastore",
+        "github.com/ipfs/go-datastore/autobatch",
+        "github.com/ipfs/go-datastore/query",
+        "github.com/ipfs/go-datastore/sync"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ipfs_go-datastore_v0.9.2/LICENSE",
+          "sha256": "5764c9996b57a43617ad355e5a4fa1665677af8377f62fde870e5999f5869e28"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ipfs/go-log/v2",
+      "version": "v2.9.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ipfs/go-log/v2"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ipfs_go-log_v2_v2.9.2/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/ipld/go-ipld-prime",
+      "version": "v0.24.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/ipld/go-ipld-prime",
+        "github.com/ipld/go-ipld-prime/adl",
+        "github.com/ipld/go-ipld-prime/codec",
+        "github.com/ipld/go-ipld-prime/codec/dagcbor",
+        "github.com/ipld/go-ipld-prime/datamodel",
+        "github.com/ipld/go-ipld-prime/linking",
+        "github.com/ipld/go-ipld-prime/linking/cid",
+        "github.com/ipld/go-ipld-prime/multicodec",
+        "github.com/ipld/go-ipld-prime/node/basic",
+        "github.com/ipld/go-ipld-prime/node/basicnode",
+        "github.com/ipld/go-ipld-prime/node/bindnode",
+        "github.com/ipld/go-ipld-prime/node/mixins",
+        "github.com/ipld/go-ipld-prime/schema",
+        "github.com/ipld/go-ipld-prime/schema/dmt",
+        "github.com/ipld/go-ipld-prime/schema/dsl",
+        "github.com/ipld/go-ipld-prime/storage"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_ipld_go-ipld-prime_v0.24.0/LICENSE",
+          "sha256": "1220ff775687e47e4bfc122dbfe3cfc68ae73d134a37984b140881fae2797867"
+        }
+      ]
+    },
+    {
+      "module": "github.com/jackpal/go-nat-pmp",
+      "version": "v1.0.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/jackpal/go-nat-pmp"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_jackpal_go-nat-pmp_v1.0.2/LICENSE",
+          "sha256": "1596ea320a3d9e5180576b2c6dd28aa34b9edcef27693fcd0474e24bda3fdcab"
+        }
+      ]
+    },
+    {
+      "module": "github.com/jbenet/go-temp-err-catcher",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/jbenet/go-temp-err-catcher"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_jbenet_go-temp-err-catcher_v0.1.0/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/klauspost/compress",
+      "version": "v1.19.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/klauspost/compress",
+        "github.com/klauspost/compress/fse",
+        "github.com/klauspost/compress/huff0",
+        "github.com/klauspost/compress/internal/cpuinfo",
+        "github.com/klauspost/compress/internal/le",
+        "github.com/klauspost/compress/internal/race",
+        "github.com/klauspost/compress/internal/snapref",
+        "github.com/klauspost/compress/s2",
+        "github.com/klauspost/compress/snappy",
+        "github.com/klauspost/compress/zstd",
+        "github.com/klauspost/compress/zstd/internal/xxhash"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_klauspost_compress_v1.19.0/internal/snapref/LICENSE",
+          "sha256": "f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf"
+        },
+        {
+          "file": "licenses/modules/github.com_klauspost_compress_v1.19.0/LICENSE",
+          "sha256": "0d9e582ee4bff57bf1189c9e514e6da7ce277f9cd3bc2d488b22fbb39a6d87cf"
+        },
+        {
+          "file": "licenses/modules/github.com_klauspost_compress_v1.19.0/s2/LICENSE",
+          "sha256": "08683b14bda8ae3538abf19e1879e853a39e3b8276a8d673363b529d15a61c1a"
+        },
+        {
+          "file": "licenses/modules/github.com_klauspost_compress_v1.19.0/snappy/LICENSE",
+          "sha256": "f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf"
+        },
+        {
+          "file": "licenses/modules/github.com_klauspost_compress_v1.19.0/zstd/internal/xxhash/LICENSE.txt",
+          "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c"
+        }
+      ]
+    },
+    {
+      "module": "github.com/klauspost/cpuid/v2",
+      "version": "v2.4.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/klauspost/cpuid/v2"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_klauspost_cpuid_v2_v2.4.0/LICENSE",
+          "sha256": "5d966570d7a442d4e969892860a914e542c97f262c873baee8f0aa48e1f40212"
+        }
+      ]
+    },
+    {
+      "module": "github.com/koron/go-ssdp",
+      "version": "v0.9.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/koron/go-ssdp",
+        "github.com/koron/go-ssdp/internal/multicast",
+        "github.com/koron/go-ssdp/internal/ssdplog"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_koron_go-ssdp_v0.9.1/LICENSE",
+          "sha256": "19bf6375dd79e92e109f5f2603f824a14056d051a5f9ef77ea02c573668fd0d1"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-buffer-pool",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-buffer-pool"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-buffer-pool_v0.1.0/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        },
+        {
+          "file": "licenses/modules/github.com_libp2p_go-buffer-pool_v0.1.0/LICENSE-BSD",
+          "sha256": "a3447ff6402de866dc8e086d0f206ee836b4d5410e427d92a1463d782b6b51fc"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-cidranger",
+      "version": "v1.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-cidranger",
+        "github.com/libp2p/go-cidranger/net"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-cidranger_v1.1.0/LICENSE",
+          "sha256": "00364c787e5b510a6ea5b863092925d931a76464715c24129c2d01a3279ce6ef"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-flow-metrics",
+      "version": "v0.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-flow-metrics"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-flow-metrics_v0.3.0/LICENSE",
+          "sha256": "43e3810bf4cffbc6c86fd858f31924ced6cd053091e472f0e822a9dc067beab6"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p-asn-util",
+      "version": "v0.4.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p-asn-util"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p-asn-util_v0.4.1/LICENSE",
+          "sha256": "bfe24471d0666e27fba8a36fff0bfa96fe972408ea2834140ffdcc549789ad55"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p-kad-dht",
+      "version": "v0.41.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p-kad-dht",
+        "github.com/libp2p/go-libp2p-kad-dht/amino",
+        "github.com/libp2p/go-libp2p-kad-dht/internal",
+        "github.com/libp2p/go-libp2p-kad-dht/internal/config",
+        "github.com/libp2p/go-libp2p-kad-dht/internal/metrics",
+        "github.com/libp2p/go-libp2p-kad-dht/internal/net",
+        "github.com/libp2p/go-libp2p-kad-dht/netsize",
+        "github.com/libp2p/go-libp2p-kad-dht/pb",
+        "github.com/libp2p/go-libp2p-kad-dht/qpeerset",
+        "github.com/libp2p/go-libp2p-kad-dht/records",
+        "github.com/libp2p/go-libp2p-kad-dht/rtrefresh"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p-kad-dht_v0.41.0/LICENSE",
+          "sha256": "870903a5afd2ec2b73c49ba35fe9d26946564994ee2a02fcc17eba7240e99648"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p-kbucket",
+      "version": "v0.9.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p-kbucket",
+        "github.com/libp2p/go-libp2p-kbucket/keyspace",
+        "github.com/libp2p/go-libp2p-kbucket/peerdiversity"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p-kbucket_v0.9.0/LICENSE",
+          "sha256": "4baf5a51d5c9021302b50abf18942c7b865683ab7e2ec43ac3f55c25a8aa3383"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p-record",
+      "version": "v0.3.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p-record",
+        "github.com/libp2p/go-libp2p-record/pb"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p-record_v0.3.1/LICENSE",
+          "sha256": "f03dd4e99f7c5c4e4fa4ec5bca2019c6a5987b2d3a8433f8675b874e53dcb5cc"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p-routing-helpers",
+      "version": "v0.7.5",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p-routing-helpers/tracing"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p-routing-helpers_v0.7.5/LICENSE",
+          "sha256": "586697408655b5dbd12399bd56ffb48ea31613b2161a82d4690e771ed96300d1"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-libp2p",
+      "version": "v0.48.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-libp2p",
+        "github.com/libp2p/go-libp2p/config",
+        "github.com/libp2p/go-libp2p/core/connmgr",
+        "github.com/libp2p/go-libp2p/core/control",
+        "github.com/libp2p/go-libp2p/core/crypto",
+        "github.com/libp2p/go-libp2p/core/crypto/pb",
+        "github.com/libp2p/go-libp2p/core/discovery",
+        "github.com/libp2p/go-libp2p/core/event",
+        "github.com/libp2p/go-libp2p/core/host",
+        "github.com/libp2p/go-libp2p/core/internal/catch",
+        "github.com/libp2p/go-libp2p/core/metrics",
+        "github.com/libp2p/go-libp2p/core/network",
+        "github.com/libp2p/go-libp2p/core/peer",
+        "github.com/libp2p/go-libp2p/core/peer/pb",
+        "github.com/libp2p/go-libp2p/core/peerstore",
+        "github.com/libp2p/go-libp2p/core/pnet",
+        "github.com/libp2p/go-libp2p/core/protocol",
+        "github.com/libp2p/go-libp2p/core/record",
+        "github.com/libp2p/go-libp2p/core/record/pb",
+        "github.com/libp2p/go-libp2p/core/routing",
+        "github.com/libp2p/go-libp2p/core/sec",
+        "github.com/libp2p/go-libp2p/core/transport",
+        "github.com/libp2p/go-libp2p/gologshim",
+        "github.com/libp2p/go-libp2p/p2p/canonicallog",
+        "github.com/libp2p/go-libp2p/p2p/discovery/routing",
+        "github.com/libp2p/go-libp2p/p2p/discovery/util",
+        "github.com/libp2p/go-libp2p/p2p/host/autonat",
+        "github.com/libp2p/go-libp2p/p2p/host/autonat/pb",
+        "github.com/libp2p/go-libp2p/p2p/host/autorelay",
+        "github.com/libp2p/go-libp2p/p2p/host/basic",
+        "github.com/libp2p/go-libp2p/p2p/host/blank",
+        "github.com/libp2p/go-libp2p/p2p/host/eventbus",
+        "github.com/libp2p/go-libp2p/p2p/host/observedaddrs",
+        "github.com/libp2p/go-libp2p/p2p/host/peerstore",
+        "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem",
+        "github.com/libp2p/go-libp2p/p2p/host/pstoremanager",
+        "github.com/libp2p/go-libp2p/p2p/host/relaysvc",
+        "github.com/libp2p/go-libp2p/p2p/host/resource-manager",
+        "github.com/libp2p/go-libp2p/p2p/host/routed",
+        "github.com/libp2p/go-libp2p/p2p/metricshelper",
+        "github.com/libp2p/go-libp2p/p2p/muxer/yamux",
+        "github.com/libp2p/go-libp2p/p2p/net/connmgr",
+        "github.com/libp2p/go-libp2p/p2p/net/nat",
+        "github.com/libp2p/go-libp2p/p2p/net/nat/internal/nat",
+        "github.com/libp2p/go-libp2p/p2p/net/pnet",
+        "github.com/libp2p/go-libp2p/p2p/net/reuseport",
+        "github.com/libp2p/go-libp2p/p2p/net/swarm",
+        "github.com/libp2p/go-libp2p/p2p/net/upgrader",
+        "github.com/libp2p/go-libp2p/p2p/protocol/autonatv2",
+        "github.com/libp2p/go-libp2p/p2p/protocol/autonatv2/pb",
+        "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client",
+        "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/pb",
+        "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/proto",
+        "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay",
+        "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/util",
+        "github.com/libp2p/go-libp2p/p2p/protocol/holepunch",
+        "github.com/libp2p/go-libp2p/p2p/protocol/holepunch/pb",
+        "github.com/libp2p/go-libp2p/p2p/protocol/identify",
+        "github.com/libp2p/go-libp2p/p2p/protocol/identify/internal/user-agent",
+        "github.com/libp2p/go-libp2p/p2p/protocol/identify/pb",
+        "github.com/libp2p/go-libp2p/p2p/protocol/ping",
+        "github.com/libp2p/go-libp2p/p2p/security/insecure",
+        "github.com/libp2p/go-libp2p/p2p/security/insecure/pb",
+        "github.com/libp2p/go-libp2p/p2p/security/noise",
+        "github.com/libp2p/go-libp2p/p2p/security/noise/pb",
+        "github.com/libp2p/go-libp2p/p2p/security/tls",
+        "github.com/libp2p/go-libp2p/p2p/transport/quic",
+        "github.com/libp2p/go-libp2p/p2p/transport/quicreuse",
+        "github.com/libp2p/go-libp2p/p2p/transport/tcp",
+        "github.com/libp2p/go-libp2p/p2p/transport/tcpreuse",
+        "github.com/libp2p/go-libp2p/p2p/transport/tcpreuse/internal/sampledconn",
+        "github.com/libp2p/go-libp2p/p2p/transport/webrtc",
+        "github.com/libp2p/go-libp2p/p2p/transport/webrtc/pb",
+        "github.com/libp2p/go-libp2p/p2p/transport/webrtc/udpmux",
+        "github.com/libp2p/go-libp2p/p2p/transport/websocket",
+        "github.com/libp2p/go-libp2p/p2p/transport/webtransport",
+        "github.com/libp2p/go-libp2p/x/rate"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        },
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/net/nat/internal/nat/LICENSE",
+          "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68"
+        },
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/transport/websocket/LICENSE-APACHE",
+          "sha256": "30fdfde4dbde73c66123aba24487366771ffc54bba09566b313338199c3eb7dc"
+        },
+        {
+          "file": "licenses/modules/github.com_libp2p_go-libp2p_v0.48.0/p2p/transport/websocket/LICENSE-MIT",
+          "sha256": "8f71659370c5268d9a1dc962a46232540e8fca63462586d8efaa95aab492a208"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-msgio",
+      "version": "v0.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-msgio",
+        "github.com/libp2p/go-msgio/pbio"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-msgio_v0.3.0/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-netroute",
+      "version": "v0.4.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-netroute"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-netroute_v0.4.0/LICENSE",
+          "sha256": "84a049e0389f2118af2538e74523a7f76967f94bbfc93e43688cd4dfd4b89e95"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-reuseport",
+      "version": "v0.4.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-reuseport"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-reuseport_v0.4.0/LICENSE",
+          "sha256": "6cc3a199a8dc4cad9771130debd753ed099c6f6d91274092d2711af4ccc16bbb"
+        }
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-yamux/v5",
+      "version": "v5.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/libp2p/go-yamux/v5"
+      ],
+      "source_included": "licenses/source/github.com_libp2p_go-yamux_v5_v5.1.0",
+      "license_selected": "MPL-2.0",
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_libp2p_go-yamux_v5_v5.1.0/LICENSE",
+          "sha256": "812e9d96e900a093ae4d1d3f22c5f82f568a0a0461c3007a99d00573d41c5461"
+        },
+        {
+          "file": "licenses/modules/github.com_libp2p_go-yamux_v5_v5.1.0/LICENSE-BSD",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        }
+      ]
+    },
+    {
+      "module": "github.com/lunfardo314/easyfl",
+      "version": "v0.0.0-20261012131332-8e4d838e7b0b",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/lunfardo314/easyfl",
+        "github.com/lunfardo314/easyfl/chess",
+        "github.com/lunfardo314/easyfl/easyfl_util",
+        "github.com/lunfardo314/easyfl/embed",
+        "github.com/lunfardo314/easyfl/engine",
+        "github.com/lunfardo314/easyfl/slicepool",
+        "github.com/lunfardo314/easyfl/tuples"
+      ],
+      "notices": []
+    },
+    {
+      "module": "github.com/lunfardo314/proxima",
+      "version": "60515d0074e63e467de6d63532c1236c1bec332a",
+      "used_by": [
+        "proxi.exe",
+        "oracle.exe"
+      ],
+      "packages": [
+        "github.com/lunfardo314/proxima/api",
+        "github.com/lunfardo314/proxima/api/client",
+        "github.com/lunfardo314/proxima/api/dag_explorer",
+        "github.com/lunfardo314/proxima/api/logo",
+        "github.com/lunfardo314/proxima/api/streaming",
+        "github.com/lunfardo314/proxima/consolidator",
+        "github.com/lunfardo314/proxima/core/attacher",
+        "github.com/lunfardo314/proxima/core/core_modules",
+        "github.com/lunfardo314/proxima/core/core_modules/branches",
+        "github.com/lunfardo314/proxima/core/core_modules/events",
+        "github.com/lunfardo314/proxima/core/core_modules/forward_sync",
+        "github.com/lunfardo314/proxima/core/core_modules/poker",
+        "github.com/lunfardo314/proxima/core/core_modules/pull_tx_server",
+        "github.com/lunfardo314/proxima/core/core_modules/snapshot",
+        "github.com/lunfardo314/proxima/core/core_modules/snapshot_restore",
+        "github.com/lunfardo314/proxima/core/core_modules/tippool",
+        "github.com/lunfardo314/proxima/core/core_modules/txinput_queue",
+        "github.com/lunfardo314/proxima/core/core_modules/txsolicit_queue",
+        "github.com/lunfardo314/proxima/core/core_modules/txstore_writer",
+        "github.com/lunfardo314/proxima/core/memdag",
+        "github.com/lunfardo314/proxima/core/txmetadata",
+        "github.com/lunfardo314/proxima/core/vertex",
+        "github.com/lunfardo314/proxima/core/workflow",
+        "github.com/lunfardo314/proxima/examples/chess_poc",
+        "github.com/lunfardo314/proxima/examples/exhelp",
+        "github.com/lunfardo314/proxima/global",
+        "github.com/lunfardo314/proxima/ledger",
+        "github.com/lunfardo314/proxima/ledger/base",
+        "github.com/lunfardo314/proxima/ledger/multistate",
+        "github.com/lunfardo314/proxima/ledger/transaction",
+        "github.com/lunfardo314/proxima/ledger/txbuildercore",
+        "github.com/lunfardo314/proxima/peering",
+        "github.com/lunfardo314/proxima/proxi",
+        "github.com/lunfardo314/proxima/proxi/config_cmd",
+        "github.com/lunfardo314/proxima/proxi/db_cmd",
+        "github.com/lunfardo314/proxima/proxi/db_cmd/txstore",
+        "github.com/lunfardo314/proxima/proxi/glb",
+        "github.com/lunfardo314/proxima/proxi/init_cmd",
+        "github.com/lunfardo314/proxima/proxi/node_cmd",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/chess_cmd",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/consolidate",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/delegate",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/foundry",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/mine",
+        "github.com/lunfardo314/proxima/proxi/node_cmd/seq_cmd",
+        "github.com/lunfardo314/proxima/proxi/snapshot_cmd",
+        "github.com/lunfardo314/proxima/proxi/util_cmd",
+        "github.com/lunfardo314/proxima/proxi/version",
+        "github.com/lunfardo314/proxima/proxi/wallet_cmd",
+        "github.com/lunfardo314/proxima/sequencer/seqdata",
+        "github.com/lunfardo314/proxima/sequencer/txbuilder_seq",
+        "github.com/lunfardo314/proxima/txstore",
+        "github.com/lunfardo314/proxima/util",
+        "github.com/lunfardo314/proxima/util/checkpoints",
+        "github.com/lunfardo314/proxima/util/eventtype",
+        "github.com/lunfardo314/proxima/util/keystore",
+        "github.com/lunfardo314/proxima/util/lazyargs",
+        "github.com/lunfardo314/proxima/util/lines",
+        "github.com/lunfardo314/proxima/util/queue",
+        "github.com/lunfardo314/proxima/util/set",
+        "github.com/lunfardo314/proxima/util/set256",
+        "github.com/lunfardo314/proxima/util/smallkv",
+        "github.com/lunfardo314/proxima/util/testutil",
+        "github.com/lunfardo314/proxima/util/vrf"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_lunfardo314_proxima_pinned-60515d0074e6/LICENSE",
+          "sha256": "31cadcffbd336b670720f1b39404ef555c6f842abb6f036bbb5e482d50a9f8bf"
+        }
+      ]
+    },
+    {
+      "module": "github.com/lunfardo314/unitrie",
+      "version": "v0.0.0-20260906143222-28d8bd0df646",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/lunfardo314/unitrie/adaptors/badger_adaptor",
+        "github.com/lunfardo314/unitrie/common",
+        "github.com/lunfardo314/unitrie/immutable",
+        "github.com/lunfardo314/unitrie/models/trie_blake2b",
+        "github.com/lunfardo314/unitrie/models/trie_blake2b/trie_blake2b_verify"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_lunfardo314_unitrie_v0.0.0-20260906143222-28d8bd0df646/LICENSE",
+          "sha256": "ed409acbcad71d76a0d2c3da3d1dfd997a6aa391dc8e025e78a1ca88d7c1b411"
+        }
+      ]
+    },
+    {
+      "module": "github.com/mattn/go-isatty",
+      "version": "v0.0.23",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/mattn/go-isatty"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_mattn_go-isatty_v0.0.23/LICENSE",
+          "sha256": "08eab1118c80885fa1fa6a6dd7303f65a379fcb3733e063d20d1bbc2c76e6fa1"
+        }
+      ]
+    },
+    {
+      "module": "github.com/minio/sha256-simd",
+      "version": "v1.0.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/minio/sha256-simd"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_minio_sha256-simd_v1.0.1/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "module": "github.com/mr-tron/base58",
+      "version": "v1.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/mr-tron/base58",
+        "github.com/mr-tron/base58/base58"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_mr-tron_base58_v1.3.0/LICENSE",
+          "sha256": "66f3f68b9444aad07924f60df74864ba5bc7426e2c5ce8e90caa35fe7f219036"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-base32",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-base32"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-base32_v0.1.0/LICENSE",
+          "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-base36",
+      "version": "v0.2.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-base36"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-base36_v0.2.0/LICENSE.md",
+          "sha256": "b5f1f21b1eea5d68df829130c545b431e9c277dd73f68a777e641e44c7fa2f0e"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multiaddr-dns",
+      "version": "v0.6.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multiaddr-dns"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multiaddr-dns_v0.6.0/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multiaddr-fmt",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multiaddr-fmt"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multiaddr-fmt_v0.1.0/LICENSE",
+          "sha256": "9920c9d83227e8f17a56b9083ee61b9ab456e1bc647e09c036ed99a22a3dbeb9"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multiaddr",
+      "version": "v0.16.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multiaddr",
+        "github.com/multiformats/go-multiaddr/net",
+        "github.com/multiformats/go-multiaddr/x/meg"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multiaddr_v0.16.1/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multibase",
+      "version": "v0.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multibase"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multibase_v0.3.0/LICENSE",
+          "sha256": "15058920d28b09c239089c5dce547b3d093e677b267024976577671c0fb8620f"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multicodec",
+      "version": "v0.10.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multicodec"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE",
+          "sha256": "0ec33e8775859961a3bf71bee9253c79a36a0d874aaaf411a60d14684f5a2094"
+        },
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE-APACHE",
+          "sha256": "2f39410eee81b673fa9e20e387c65841bb004c6a24b466d1eb97625349c419df"
+        },
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multicodec_v0.10.0/LICENSE-MIT",
+          "sha256": "8e968b9de0b2557116bc8064d5e4a58d2ef0d9d31d83325aaef5cc93353592e6"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multihash",
+      "version": "v0.2.3",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multihash",
+        "github.com/multiformats/go-multihash/core",
+        "github.com/multiformats/go-multihash/register/all",
+        "github.com/multiformats/go-multihash/register/blake2",
+        "github.com/multiformats/go-multihash/register/blake3",
+        "github.com/multiformats/go-multihash/register/miniosha256",
+        "github.com/multiformats/go-multihash/register/murmur3",
+        "github.com/multiformats/go-multihash/register/sha256",
+        "github.com/multiformats/go-multihash/register/sha3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multihash_v0.2.3/LICENSE",
+          "sha256": "2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-multistream",
+      "version": "v0.6.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-multistream"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-multistream_v0.6.1/LICENSE",
+          "sha256": "9920c9d83227e8f17a56b9083ee61b9ab456e1bc647e09c036ed99a22a3dbeb9"
+        }
+      ]
+    },
+    {
+      "module": "github.com/multiformats/go-varint",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/multiformats/go-varint"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_multiformats_go-varint_v0.1.0/LICENSE",
+          "sha256": "c559bff76ee4f4d2bcf118f2c43b31a3e1af529682b4d55193ce72134ad6607d"
+        }
+      ]
+    },
+    {
+      "module": "github.com/munnerz/goautoneg",
+      "version": "v0.0.0-20191010083416-a7dc8b61c822",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/munnerz/goautoneg"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_munnerz_goautoneg_v0.0.0-20191010083416-a7dc8b61c822/LICENSE",
+          "sha256": "aa1376b9bc5dea6f30cdefde40c176a254f247d2814d0a9929395138631b2ae0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pbnjay/memory",
+      "version": "v0.0.0-20210728143218-7b4eea64cf58",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pbnjay/memory"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pbnjay_memory_v0.0.0-20210728143218-7b4eea64cf58/LICENSE",
+          "sha256": "f0e4a9d181cbbbc742355f1723a4273fff79d999fd4d65caa2dc92fbcc5937be"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pelletier/go-toml/v2",
+      "version": "v2.4.3",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pelletier/go-toml/v2",
+        "github.com/pelletier/go-toml/v2/internal/parserbridge",
+        "github.com/pelletier/go-toml/v2/internal/tracker",
+        "github.com/pelletier/go-toml/v2/unstable"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pelletier_go-toml_v2_v2.4.3/LICENSE",
+          "sha256": "26844e4b53c5adec04e557fd7dfef281cc0205a7d355626b1c68b778b99e9e7b"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/datachannel",
+      "version": "v1.6.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/datachannel"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_datachannel_v1.6.2/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_datachannel_v1.6.2/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/dtls/v3",
+      "version": "v3.1.5",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/dtls/v3",
+        "github.com/pion/dtls/v3/internal/ciphersuite",
+        "github.com/pion/dtls/v3/internal/ciphersuite/types",
+        "github.com/pion/dtls/v3/internal/closer",
+        "github.com/pion/dtls/v3/internal/net",
+        "github.com/pion/dtls/v3/internal/net/udp",
+        "github.com/pion/dtls/v3/internal/util",
+        "github.com/pion/dtls/v3/pkg/crypto/ccm",
+        "github.com/pion/dtls/v3/pkg/crypto/ciphersuite",
+        "github.com/pion/dtls/v3/pkg/crypto/clientcertificate",
+        "github.com/pion/dtls/v3/pkg/crypto/elliptic",
+        "github.com/pion/dtls/v3/pkg/crypto/fingerprint",
+        "github.com/pion/dtls/v3/pkg/crypto/hash",
+        "github.com/pion/dtls/v3/pkg/crypto/prf",
+        "github.com/pion/dtls/v3/pkg/crypto/signature",
+        "github.com/pion/dtls/v3/pkg/crypto/signaturehash",
+        "github.com/pion/dtls/v3/pkg/net",
+        "github.com/pion/dtls/v3/pkg/protocol",
+        "github.com/pion/dtls/v3/pkg/protocol/alert",
+        "github.com/pion/dtls/v3/pkg/protocol/extension",
+        "github.com/pion/dtls/v3/pkg/protocol/handshake",
+        "github.com/pion/dtls/v3/pkg/protocol/recordlayer"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSES/CC0-1.0.txt",
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_dtls_v3_v3.1.5/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/ice/v4",
+      "version": "v4.3.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/ice/v4",
+        "github.com/pion/ice/v4/internal/atomic",
+        "github.com/pion/ice/v4/internal/fakenet",
+        "github.com/pion/ice/v4/internal/netutil",
+        "github.com/pion/ice/v4/internal/stun",
+        "github.com/pion/ice/v4/internal/taskloop"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_ice_v4_v4.3.0/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_ice_v4_v4.3.0/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/interceptor",
+      "version": "v0.1.45",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/interceptor",
+        "github.com/pion/interceptor/internal/ntp",
+        "github.com/pion/interceptor/internal/rtpbuffer",
+        "github.com/pion/interceptor/internal/sequencenumber",
+        "github.com/pion/interceptor/pkg/flexfec",
+        "github.com/pion/interceptor/pkg/flexfec/util",
+        "github.com/pion/interceptor/pkg/nack",
+        "github.com/pion/interceptor/pkg/report",
+        "github.com/pion/interceptor/pkg/rfc8888",
+        "github.com/pion/interceptor/pkg/stats",
+        "github.com/pion/interceptor/pkg/twcc"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_interceptor_v0.1.45/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_interceptor_v0.1.45/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/logging",
+      "version": "v0.2.4",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/logging"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_logging_v0.2.4/LICENSE",
+          "sha256": "87272dba8c4fcf57101a3195f4f53f7b010b6e153b9b0977bb1a3f91acddf691"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_logging_v0.2.4/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/mdns/v2",
+      "version": "v2.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/mdns/v2"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_mdns_v2_v2.1.0/LICENSE",
+          "sha256": "83e4dd21429a91fb7cea67a476032a9641425e5355df2e0f589a738b6ec9fd2c"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_mdns_v2_v2.1.0/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/randutil",
+      "version": "v0.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/randutil"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_randutil_v0.1.0/LICENSE",
+          "sha256": "badaf9bc72e71d5a70e7604c636b5b7adf79b9cafc188688438105d2b1e54722"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/rtcp",
+      "version": "v1.2.17",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/rtcp"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSES/CC0-1.0.txt",
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_rtcp_v1.2.17/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/rtp",
+      "version": "v1.10.3",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/rtp",
+        "github.com/pion/rtp/codecs",
+        "github.com/pion/rtp/codecs/av1/obu",
+        "github.com/pion/rtp/codecs/vp9"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_rtp_v1.10.3/LICENSE",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_rtp_v1.10.3/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/sctp",
+      "version": "v1.11.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/sctp"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_sctp_v1.11.0/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_sctp_v1.11.0/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/sdp/v3",
+      "version": "v3.0.19",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/sdp/v3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_sdp_v3_v3.0.19/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_sdp_v3_v3.0.19/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/srtp/v3",
+      "version": "v3.0.12",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/srtp/v3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_srtp_v3_v3.0.12/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_srtp_v3_v3.0.12/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/stun/v3",
+      "version": "v3.1.6",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/stun/v3",
+        "github.com/pion/stun/v3/internal/hmac"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/BSD-3-Clause.txt",
+          "sha256": "5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/CC0-1.0.txt",
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_stun_v3_v3.1.6/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/transport/v4",
+      "version": "v4.0.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/transport/v4",
+        "github.com/pion/transport/v4/deadline",
+        "github.com/pion/transport/v4/netctx",
+        "github.com/pion/transport/v4/packetio",
+        "github.com/pion/transport/v4/replaydetector",
+        "github.com/pion/transport/v4/reuseport",
+        "github.com/pion/transport/v4/stdnet",
+        "github.com/pion/transport/v4/utils/xor",
+        "github.com/pion/transport/v4/vnet"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSES/BSD-3-Clause.txt",
+          "sha256": "5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_transport_v4_v4.0.2/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/turn/v5",
+      "version": "v5.0.12",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/turn/v5",
+        "github.com/pion/turn/v5/internal/allocation",
+        "github.com/pion/turn/v5/internal/auth",
+        "github.com/pion/turn/v5/internal/client",
+        "github.com/pion/turn/v5/internal/ipnet",
+        "github.com/pion/turn/v5/internal/proto",
+        "github.com/pion/turn/v5/internal/server"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSES/CC0-1.0.txt",
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_turn_v5_v5.0.12/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pion/webrtc/v4",
+      "version": "v4.2.16",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pion/webrtc/v4",
+        "github.com/pion/webrtc/v4/internal/fmtp",
+        "github.com/pion/webrtc/v4/internal/mux",
+        "github.com/pion/webrtc/v4/internal/util",
+        "github.com/pion/webrtc/v4/pkg/media",
+        "github.com/pion/webrtc/v4/pkg/rtcerr"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pion_webrtc_v4_v4.2.16/LICENSE",
+          "sha256": "6483daf6c8aa2c8192528e60be098aa82dd18f6d7b96dc8246f4f7c3333fbf3f"
+        },
+        {
+          "file": "licenses/modules/github.com_pion_webrtc_v4_v4.2.16/LICENSES/MIT.txt",
+          "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/pmezard/go-difflib",
+      "version": "v1.0.1-0.20181226105442-5d4384ee4fb2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/pmezard/go-difflib/difflib"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_pmezard_go-difflib_v1.0.1-0.20181226105442-5d4384ee4fb2/LICENSE",
+          "sha256": "2eb550be6801c1ea434feba53bf6d12e7c71c90253e0a9de4a4f46cf88b56477"
+        }
+      ]
+    },
+    {
+      "module": "github.com/polydawn/refmt",
+      "version": "v0.90.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/polydawn/refmt/cbor",
+        "github.com/polydawn/refmt/obj",
+        "github.com/polydawn/refmt/obj/atlas",
+        "github.com/polydawn/refmt/shared",
+        "github.com/polydawn/refmt/tok"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_polydawn_refmt_v0.90.0/LICENSE",
+          "sha256": "7967afb026113a0c79998072a701855c7639ec6275da4dae8221cfab9e3c52a0"
+        }
+      ]
+    },
+    {
+      "module": "github.com/prometheus/client_golang",
+      "version": "v1.23.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/prometheus/client_golang/prometheus",
+        "github.com/prometheus/client_golang/prometheus/internal"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_prometheus_client_golang_v1.23.2/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "file": "licenses/modules/github.com_prometheus_client_golang_v1.23.2/NOTICE",
+          "sha256": "8548bfb2bc1913396df38c548a6ec60b8dbcac3b0800485a40569c8bdd184471"
+        }
+      ]
+    },
+    {
+      "module": "github.com/prometheus/client_model",
+      "version": "v0.6.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/prometheus/client_model/go"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_prometheus_client_model_v0.6.2/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "file": "licenses/modules/github.com_prometheus_client_model_v0.6.2/NOTICE",
+          "sha256": "6c79faa15168885fb88a316ae0df18f486deafddefdc16826cdc56dfbd421e24"
+        }
+      ]
+    },
+    {
+      "module": "github.com/prometheus/common",
+      "version": "v0.70.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/prometheus/common/expfmt",
+        "github.com/prometheus/common/model"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_prometheus_common_v0.70.0/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "file": "licenses/modules/github.com_prometheus_common_v0.70.0/NOTICE",
+          "sha256": "600244c8052c8c1d307043fafacbc83b429c171dd8e08f5a537c0a54014585ee"
+        }
+      ]
+    },
+    {
+      "module": "github.com/quic-go/qpack",
+      "version": "v0.6.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/quic-go/qpack"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_quic-go_qpack_v0.6.0/LICENSE.md",
+          "sha256": "1b6a897efd39b20b3cdce8cd306160d115dbded39d855ceeffe21dc11e4d53df"
+        }
+      ]
+    },
+    {
+      "module": "github.com/quic-go/quic-go",
+      "version": "v0.60.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/quic-go/quic-go",
+        "github.com/quic-go/quic-go/http3",
+        "github.com/quic-go/quic-go/http3/qlog",
+        "github.com/quic-go/quic-go/internal/ackhandler",
+        "github.com/quic-go/quic-go/internal/congestion",
+        "github.com/quic-go/quic-go/internal/flowcontrol",
+        "github.com/quic-go/quic-go/internal/handshake",
+        "github.com/quic-go/quic-go/internal/monotime",
+        "github.com/quic-go/quic-go/internal/protocol",
+        "github.com/quic-go/quic-go/internal/qerr",
+        "github.com/quic-go/quic-go/internal/utils",
+        "github.com/quic-go/quic-go/internal/utils/linkedlist",
+        "github.com/quic-go/quic-go/internal/utils/ringbuffer",
+        "github.com/quic-go/quic-go/internal/wire",
+        "github.com/quic-go/quic-go/qlog",
+        "github.com/quic-go/quic-go/qlogwriter",
+        "github.com/quic-go/quic-go/qlogwriter/jsontext",
+        "github.com/quic-go/quic-go/quicvarint"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_quic-go_quic-go_v0.60.0/LICENSE",
+          "sha256": "77d0b7b53e8abb84cf4dd3f9945a7fdf27044240d2e8023966a721a9a46fe96e"
+        }
+      ]
+    },
+    {
+      "module": "github.com/quic-go/webtransport-go",
+      "version": "v0.11.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/quic-go/webtransport-go"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_quic-go_webtransport-go_v0.11.1/LICENSE",
+          "sha256": "83fcbe9e2a58019f63c1eb3dbccd74ec735bf69a750822bf4a0a17a1d174672c"
+        }
+      ]
+    },
+    {
+      "module": "github.com/sagikazarmark/locafero",
+      "version": "v0.12.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/sagikazarmark/locafero",
+        "github.com/sagikazarmark/locafero/internal/queue"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_sagikazarmark_locafero_v0.12.0/LICENSE",
+          "sha256": "c4129f2c2a5eb20e4ac7b2535dab899fde485865106a15189726e2db68ff3483"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spaolacci/murmur3",
+      "version": "v1.1.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spaolacci/murmur3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spaolacci_murmur3_v1.1.0/LICENSE",
+          "sha256": "acf8baa6169d044dcde836a61d652452f55be0ec5eb22f2cdf2ff69c8c45fc38"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spf13/afero",
+      "version": "v1.15.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spf13/afero",
+        "github.com/spf13/afero/internal/common",
+        "github.com/spf13/afero/mem"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spf13_afero_v1.15.0/LICENSE.txt",
+          "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spf13/cast",
+      "version": "v1.10.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spf13/cast",
+        "github.com/spf13/cast/internal"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spf13_cast_v1.10.0/LICENSE",
+          "sha256": "feb6d17a0e7a64e5ab0f7e2b0e0ee3e69c1a6396626fd554dc0cddaa06851b44"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spf13/cobra",
+      "version": "v1.10.2",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spf13/cobra"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spf13_cobra_v1.10.2/LICENSE.txt",
+          "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spf13/pflag",
+      "version": "v1.0.10",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spf13/pflag"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spf13_pflag_v1.0.10/LICENSE",
+          "sha256": "b8514c577c1c4b46cee454d5a882b15fa411e72c5bd7f801f241591789fce61a"
+        }
+      ]
+    },
+    {
+      "module": "github.com/spf13/viper",
+      "version": "v1.21.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/spf13/viper",
+        "github.com/spf13/viper/internal/encoding/dotenv",
+        "github.com/spf13/viper/internal/encoding/json",
+        "github.com/spf13/viper/internal/encoding/toml",
+        "github.com/spf13/viper/internal/encoding/yaml",
+        "github.com/spf13/viper/internal/features"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_spf13_viper_v1.21.0/LICENSE",
+          "sha256": "feb6d17a0e7a64e5ab0f7e2b0e0ee3e69c1a6396626fd554dc0cddaa06851b44"
+        }
+      ]
+    },
+    {
+      "module": "github.com/stretchr/testify",
+      "version": "v1.11.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/stretchr/testify/assert",
+        "github.com/stretchr/testify/assert/yaml",
+        "github.com/stretchr/testify/require"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_stretchr_testify_v1.11.1/LICENSE",
+          "sha256": "f8e536c1c7b695810427095dc85f5f80d44ff7c10535e8a9486cf393e2599189"
+        }
+      ]
+    },
+    {
+      "module": "github.com/subosito/gotenv",
+      "version": "v1.6.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/subosito/gotenv"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_subosito_gotenv_v1.6.0/LICENSE",
+          "sha256": "1fd29c692f599736d92f7c02b7826836c0d2ccc838689b21822f4ce0253c39df"
+        }
+      ]
+    },
+    {
+      "module": "github.com/whyrusleeping/go-keyspace",
+      "version": "v0.0.0-20160322163242-5b898ac5add1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/whyrusleeping/go-keyspace"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_whyrusleeping_go-keyspace_v0.0.0-20160322163242-5b898ac5add1/LICENSE",
+          "sha256": "9920c9d83227e8f17a56b9083ee61b9ab456e1bc647e09c036ed99a22a3dbeb9"
+        }
+      ]
+    },
+    {
+      "module": "github.com/whyrusleeping/multiaddr-filter",
+      "version": "v0.0.0-20160516205228-e903e4adabd7",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/whyrusleeping/multiaddr-filter"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_whyrusleeping_multiaddr-filter_v0.0.0-20160516205228-e903e4adabd7/LICENSE",
+          "sha256": "155a03f6411d702744ac087cf5721a3f8864c24fd9ee4bf77866656f0a9f1827"
+        }
+      ]
+    },
+    {
+      "module": "github.com/wlynxg/anet",
+      "version": "v0.0.5",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "github.com/wlynxg/anet"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/github.com_wlynxg_anet_v0.0.5/LICENSE",
+          "sha256": "6b8970dbe36fe214fd02b438c06daee19897708e435d761ecd18adc9ef7e7a05"
+        }
+      ]
+    },
+    {
+      "module": "go.opentelemetry.io/auto/sdk",
+      "version": "v1.2.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.opentelemetry.io/auto/sdk",
+        "go.opentelemetry.io/auto/sdk/internal/telemetry"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.opentelemetry.io_auto_sdk_v1.2.1/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "module": "go.opentelemetry.io/otel/metric",
+      "version": "v1.44.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.opentelemetry.io/otel/metric",
+        "go.opentelemetry.io/otel/metric/embedded"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.opentelemetry.io_otel_metric_v1.44.0/LICENSE",
+          "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+        }
+      ]
+    },
+    {
+      "module": "go.opentelemetry.io/otel/trace",
+      "version": "v1.44.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.opentelemetry.io/otel/trace",
+        "go.opentelemetry.io/otel/trace/embedded",
+        "go.opentelemetry.io/otel/trace/internal/telemetry",
+        "go.opentelemetry.io/otel/trace/noop"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.opentelemetry.io_otel_trace_v1.44.0/LICENSE",
+          "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+        }
+      ]
+    },
+    {
+      "module": "go.opentelemetry.io/otel",
+      "version": "v1.44.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.opentelemetry.io/otel",
+        "go.opentelemetry.io/otel/attribute",
+        "go.opentelemetry.io/otel/attribute/internal",
+        "go.opentelemetry.io/otel/attribute/internal/xxhash",
+        "go.opentelemetry.io/otel/baggage",
+        "go.opentelemetry.io/otel/codes",
+        "go.opentelemetry.io/otel/internal/baggage",
+        "go.opentelemetry.io/otel/internal/errorhandler",
+        "go.opentelemetry.io/otel/internal/global",
+        "go.opentelemetry.io/otel/propagation",
+        "go.opentelemetry.io/otel/semconv/v1.37.0",
+        "go.opentelemetry.io/otel/semconv/v1.41.0"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.opentelemetry.io_otel_v1.44.0/LICENSE",
+          "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+        }
+      ]
+    },
+    {
+      "module": "go.uber.org/dig",
+      "version": "v1.19.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.uber.org/dig",
+        "go.uber.org/dig/internal/digclock",
+        "go.uber.org/dig/internal/digerror",
+        "go.uber.org/dig/internal/digreflect",
+        "go.uber.org/dig/internal/dot",
+        "go.uber.org/dig/internal/graph"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.uber.org_dig_v1.19.0/LICENSE",
+          "sha256": "5cce09a0a02e15f476aa4385bf23d13ec8447de58a7057523a82dcc80f0aff04"
+        }
+      ]
+    },
+    {
+      "module": "go.uber.org/fx",
+      "version": "v1.24.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.uber.org/fx",
+        "go.uber.org/fx/fxevent",
+        "go.uber.org/fx/internal/fxclock",
+        "go.uber.org/fx/internal/fxlog",
+        "go.uber.org/fx/internal/fxreflect",
+        "go.uber.org/fx/internal/lifecycle"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.uber.org_fx_v1.24.0/LICENSE",
+          "sha256": "bbe3f17ba5d70ac3277fb0551878c408f7f37cd8749056a3cf74b07c3b3eea09"
+        }
+      ]
+    },
+    {
+      "module": "go.uber.org/multierr",
+      "version": "v1.11.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.uber.org/multierr"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.uber.org_multierr_v1.11.0/LICENSE.txt",
+          "sha256": "dcdabe03bef2382a130640d1c3a4cd5ec42aba1035095c38272fde694eb72405"
+        }
+      ]
+    },
+    {
+      "module": "go.uber.org/zap",
+      "version": "v1.28.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.uber.org/zap",
+        "go.uber.org/zap/buffer",
+        "go.uber.org/zap/internal",
+        "go.uber.org/zap/internal/bufferpool",
+        "go.uber.org/zap/internal/color",
+        "go.uber.org/zap/internal/exit",
+        "go.uber.org/zap/internal/pool",
+        "go.uber.org/zap/internal/stacktrace",
+        "go.uber.org/zap/zapcore"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.uber.org_zap_v1.28.0/LICENSE",
+          "sha256": "c2b97b3281be272711909076c8402499b4b5a3216196af47a25b1d3674d86152"
+        }
+      ]
+    },
+    {
+      "module": "go.yaml.in/yaml/v3",
+      "version": "v3.0.4",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "go.yaml.in/yaml/v3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/go.yaml.in_yaml_v3_v3.0.4/LICENSE",
+          "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b"
+        },
+        {
+          "file": "licenses/modules/go.yaml.in_yaml_v3_v3.0.4/NOTICE",
+          "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/crypto",
+      "version": "v0.56.0",
+      "used_by": [
+        "proxi.exe",
+        "oracle.exe"
+      ],
+      "packages": [
+        "golang.org/x/crypto/argon2",
+        "golang.org/x/crypto/blake2b",
+        "golang.org/x/crypto/blake2s",
+        "golang.org/x/crypto/chacha20",
+        "golang.org/x/crypto/chacha20poly1305",
+        "golang.org/x/crypto/cryptobyte",
+        "golang.org/x/crypto/cryptobyte/asn1",
+        "golang.org/x/crypto/curve25519",
+        "golang.org/x/crypto/hkdf",
+        "golang.org/x/crypto/internal/alias",
+        "golang.org/x/crypto/internal/poly1305",
+        "golang.org/x/crypto/salsa20/salsa",
+        "golang.org/x/crypto/sha3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_crypto_v0.56.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_crypto_v0.56.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/exp",
+      "version": "v0.0.0-20260709172345-9ea1abe57597",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/exp/constraints",
+        "golang.org/x/exp/maps",
+        "golang.org/x/exp/rand",
+        "golang.org/x/exp/slices"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_exp_v0.0.0-20260709172345-9ea1abe57597/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_exp_v0.0.0-20260709172345-9ea1abe57597/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/image",
+      "version": "v0.45.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/image/ccitt",
+        "golang.org/x/image/draw",
+        "golang.org/x/image/font",
+        "golang.org/x/image/font/basicfont",
+        "golang.org/x/image/font/gofont/gobold",
+        "golang.org/x/image/font/gofont/gobolditalic",
+        "golang.org/x/image/font/gofont/goitalic",
+        "golang.org/x/image/font/gofont/goregular",
+        "golang.org/x/image/font/opentype",
+        "golang.org/x/image/font/sfnt",
+        "golang.org/x/image/internal/safemath",
+        "golang.org/x/image/math/f64",
+        "golang.org/x/image/math/fixed",
+        "golang.org/x/image/tiff",
+        "golang.org/x/image/tiff/lzw",
+        "golang.org/x/image/vector"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_image_v0.45.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_image_v0.45.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.57.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/net/bpf",
+        "golang.org/x/net/dns/dnsmessage",
+        "golang.org/x/net/http/httpguts",
+        "golang.org/x/net/http2/hpack",
+        "golang.org/x/net/idna",
+        "golang.org/x/net/internal/iana",
+        "golang.org/x/net/internal/socket",
+        "golang.org/x/net/internal/socks",
+        "golang.org/x/net/ipv4",
+        "golang.org/x/net/ipv6",
+        "golang.org/x/net/proxy"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_net_v0.57.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_net_v0.57.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.22.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/sync/errgroup"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_sync_v0.22.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_sync_v0.22.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/sys",
+      "version": "v0.47.0",
+      "used_by": [
+        "proxi.exe",
+        "oracle.exe"
+      ],
+      "packages": [
+        "golang.org/x/sys/cpu",
+        "golang.org/x/sys/windows"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_sys_v0.47.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_sys_v0.47.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/term",
+      "version": "v0.45.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/term"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_term_v0.45.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_term_v0.45.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.41.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/text/encoding",
+        "golang.org/x/text/encoding/charmap",
+        "golang.org/x/text/encoding/internal",
+        "golang.org/x/text/encoding/internal/identifier",
+        "golang.org/x/text/encoding/unicode",
+        "golang.org/x/text/feature/plural",
+        "golang.org/x/text/internal",
+        "golang.org/x/text/internal/catmsg",
+        "golang.org/x/text/internal/format",
+        "golang.org/x/text/internal/language",
+        "golang.org/x/text/internal/language/compact",
+        "golang.org/x/text/internal/number",
+        "golang.org/x/text/internal/stringset",
+        "golang.org/x/text/internal/tag",
+        "golang.org/x/text/internal/utf8internal",
+        "golang.org/x/text/language",
+        "golang.org/x/text/message",
+        "golang.org/x/text/message/catalog",
+        "golang.org/x/text/runes",
+        "golang.org/x/text/secure/bidirule",
+        "golang.org/x/text/transform",
+        "golang.org/x/text/unicode/bidi",
+        "golang.org/x/text/unicode/norm"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_text_v0.41.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_text_v0.41.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/time",
+      "version": "v0.15.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/time/rate"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_time_v0.15.0/LICENSE",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_time_v0.15.0/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "golang.org/x/xerrors",
+      "version": "v0.0.0-20240903120638-7835f813f4da",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "golang.org/x/xerrors",
+        "golang.org/x/xerrors/internal"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/golang.org_x_xerrors_v0.0.0-20240903120638-7835f813f4da/LICENSE",
+          "sha256": "f9a2df4fb1d45cef691b8bc2e35776f8bee5af5b3696d48d4547635d7858bf91"
+        },
+        {
+          "file": "licenses/modules/golang.org_x_xerrors_v0.0.0-20240903120638-7835f813f4da/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "gonum.org/v1/gonum",
+      "version": "v0.17.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "gonum.org/v1/gonum/mathext",
+        "gonum.org/v1/gonum/mathext/internal/amos",
+        "gonum.org/v1/gonum/mathext/internal/cephes",
+        "gonum.org/v1/gonum/mathext/internal/gonum"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/gonum.org_v1_gonum_v0.17.0/LICENSE",
+          "sha256": "b44d9e394ba3efc15de4e5a8ebd843bd8d6325f6ffbb0a4ff6db7181aa15dda3"
+        }
+      ]
+    },
+    {
+      "module": "gonum.org/v1/plot",
+      "version": "v0.17.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "gonum.org/v1/plot",
+        "gonum.org/v1/plot/font",
+        "gonum.org/v1/plot/font/liberation",
+        "gonum.org/v1/plot/palette",
+        "gonum.org/v1/plot/plotter",
+        "gonum.org/v1/plot/text",
+        "gonum.org/v1/plot/tools/bezier",
+        "gonum.org/v1/plot/vg",
+        "gonum.org/v1/plot/vg/draw",
+        "gonum.org/v1/plot/vg/vgeps",
+        "gonum.org/v1/plot/vg/vgimg",
+        "gonum.org/v1/plot/vg/vgpdf",
+        "gonum.org/v1/plot/vg/vgsvg",
+        "gonum.org/v1/plot/vg/vgtex"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/gonum.org_v1_plot_v0.17.0/LICENSE",
+          "sha256": "b44d9e394ba3efc15de4e5a8ebd843bd8d6325f6ffbb0a4ff6db7181aa15dda3"
+        }
+      ]
+    },
+    {
+      "module": "google.golang.org/protobuf",
+      "version": "v1.36.11",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "google.golang.org/protobuf/encoding/protodelim",
+        "google.golang.org/protobuf/encoding/prototext",
+        "google.golang.org/protobuf/encoding/protowire",
+        "google.golang.org/protobuf/internal/descfmt",
+        "google.golang.org/protobuf/internal/descopts",
+        "google.golang.org/protobuf/internal/detrand",
+        "google.golang.org/protobuf/internal/editiondefaults",
+        "google.golang.org/protobuf/internal/encoding/defval",
+        "google.golang.org/protobuf/internal/encoding/messageset",
+        "google.golang.org/protobuf/internal/encoding/tag",
+        "google.golang.org/protobuf/internal/encoding/text",
+        "google.golang.org/protobuf/internal/errors",
+        "google.golang.org/protobuf/internal/filedesc",
+        "google.golang.org/protobuf/internal/filetype",
+        "google.golang.org/protobuf/internal/flags",
+        "google.golang.org/protobuf/internal/genid",
+        "google.golang.org/protobuf/internal/impl",
+        "google.golang.org/protobuf/internal/order",
+        "google.golang.org/protobuf/internal/pragma",
+        "google.golang.org/protobuf/internal/protolazy",
+        "google.golang.org/protobuf/internal/set",
+        "google.golang.org/protobuf/internal/strs",
+        "google.golang.org/protobuf/internal/version",
+        "google.golang.org/protobuf/proto",
+        "google.golang.org/protobuf/reflect/protoreflect",
+        "google.golang.org/protobuf/reflect/protoregistry",
+        "google.golang.org/protobuf/runtime/protoiface",
+        "google.golang.org/protobuf/runtime/protoimpl",
+        "google.golang.org/protobuf/types/known/timestamppb"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/google.golang.org_protobuf_v1.36.11/LICENSE",
+          "sha256": "4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20"
+        },
+        {
+          "file": "licenses/modules/google.golang.org_protobuf_v1.36.11/PATENTS",
+          "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+        }
+      ]
+    },
+    {
+      "module": "gopkg.in/yaml.v2",
+      "version": "v2.4.0",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "gopkg.in/yaml.v2"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/gopkg.in_yaml.v2_v2.4.0/LICENSE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+        },
+        {
+          "file": "licenses/modules/gopkg.in_yaml.v2_v2.4.0/LICENSE.libyaml",
+          "sha256": "a94710b55e03b5285f77d048c5ba61bb9d6ee04a06c0eb90e68821e11b0c707a"
+        },
+        {
+          "file": "licenses/modules/gopkg.in_yaml.v2_v2.4.0/NOTICE",
+          "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00"
+        }
+      ]
+    },
+    {
+      "module": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "gopkg.in/yaml.v3"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/gopkg.in_yaml.v3_v3.0.1/LICENSE",
+          "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b"
+        },
+        {
+          "file": "licenses/modules/gopkg.in_yaml.v3_v3.0.1/NOTICE",
+          "sha256": "f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00"
+        }
+      ]
+    },
+    {
+      "module": "lukechampine.com/blake3",
+      "version": "v1.4.1",
+      "used_by": [
+        "proxi.exe"
+      ],
+      "packages": [
+        "lukechampine.com/blake3",
+        "lukechampine.com/blake3/bao",
+        "lukechampine.com/blake3/guts"
+      ],
+      "notices": [
+        {
+          "file": "licenses/modules/lukechampine.com_blake3_v1.4.1/LICENSE",
+          "sha256": "7a576402565d51f9c0c7ee5a639aa91d49ed1a54c21a8d0b56f0d25e72d8b2f1"
+        }
+      ]
+    }
+  ],
+  "missing_module_notices": [
+    "github.com/lunfardo314/easyfl@v0.0.0-20261012131332-8e4d838e7b0b"
+  ],
+  "license_collection_complete": false,
+  "python_runtime_note": "Python embedded runtime is distributed unmodified except its import-path configuration. The bundled license file includes Python and bundled third-party notices.",
+  "build_time_unix": 1792339331.4740071,
+  "easyfl_redistribution_permission": {
+    "status": "confirmed_by_package_owner",
+    "confirmation_date": "2026-10-19",
+    "license_file_at_pinned_commit": "not_found",
+    "license_terms_invented": false
+  }
+}

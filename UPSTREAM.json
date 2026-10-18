@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/lunfardo314/proxima",
+  "commit": "60515d0074e63e467de6d63532c1236c1bec332a",
+  "release": "v1.0.2-take1",
+  "modified": false,
+  "git_tree": "a627d015093d163f7aeff4f6eb0a49e7785b4a87",
+  "snapshot_strategy": "All 851 tracked files restored from exact pinned Git blob bytes; no Git checkout line-ending conversion."
+}
